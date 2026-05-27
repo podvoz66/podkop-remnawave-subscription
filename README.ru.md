@@ -1,0 +1,110 @@
+# Podkop Remnawave Subscription Updater
+
+Скрипт для OpenWrt, который берёт router-подписку Remnawave и автоматически подставляет VLESS REALITY ссылки в секции Podkop URLTest.
+
+Что делает:
+
+- скачивает Remnawave subscription;
+- декодирует base64, если подписка отдана в base64;
+- извлекает `vless://` ссылки;
+- добавляет `spx=%2F` в REALITY-ссылки, если Remnawave его не добавил;
+- раскладывает ссылки по секциям Podkop:
+  - `main` = все ссылки, кроме US;
+  - `USA` = только `us-direct-reality`;
+- перезапускает Podkop/sing-box.
+
+Итоговая схема:
+
+```text
+Remnawave subscription
+→ /usr/bin/update-podkop-from-remnawave.sh
+→ podkop.main.urltest_proxy_links = AUT + Oslo + PL
+→ podkop.USA.urltest_proxy_links = US
+→ Podkop restart
+→ sing-box running
+```
+
+## Установка на OpenWrt
+
+Создать конфиг:
+
+```sh
+mkdir -p /etc/podkop-remnawave
+cat >/etc/podkop-remnawave/subscription.conf <<'EOF_CONF'
+SUB_URL='https://sub.example.com/YOUR_TOKEN'
+EOF_CONF
+chmod 600 /etc/podkop-remnawave/subscription.conf
+```
+
+Установить скрипт:
+
+```sh
+cp scripts/update-podkop-from-remnawave.sh /usr/bin/update-podkop-from-remnawave.sh
+chmod +x /usr/bin/update-podkop-from-remnawave.sh
+```
+
+Запустить вручную:
+
+```sh
+/usr/bin/update-podkop-from-remnawave.sh
+```
+
+Ожидаемый вывод:
+
+```text
+[INFO] Found VLESS links total: 4
+[INFO] main links: 3
+[INFO] USA links: 1
+[OK] sing-box is running.
+[OK] Podkop updated from Remnawave subscription.
+```
+
+Проверить секции:
+
+```sh
+uci show podkop.main | grep 'urltest_proxy_links'
+uci show podkop.USA | grep 'urltest_proxy_links'
+pgrep -af sing-box
+netstat -lntup 2>/dev/null | grep -E '1602|9090|sing|podkop' || true
+```
+
+## Автообновление через cron
+
+```sh
+grep -q 'update-podkop-from-remnawave.sh' /etc/crontabs/root || \
+echo '0 */4 * * * /usr/bin/update-podkop-from-remnawave.sh >/tmp/podkop-sub-update.log 2>&1' >> /etc/crontabs/root
+
+/etc/init.d/cron restart
+```
+
+Проверка:
+
+```sh
+cat /tmp/podkop-sub-update.log
+```
+
+## Split-DNS, если подписка открывается с ПК, но роутер получает 404
+
+Если домен подписки указывает на публичный WAN IP самого роутера, LAN-клиенты могут попадать через NAT reflection на NPM/backend, а сам роутер — в локальный fallback и получать 404.
+
+Пример фикса:
+
+```sh
+uci add dhcp domain
+uci set dhcp.@domain[-1].name='sub.example.com'
+uci set dhcp.@domain[-1].ip='192.168.0.172'
+uci commit dhcp
+/etc/init.d/dnsmasq restart
+```
+
+Проверка:
+
+```sh
+nslookup sub.example.com
+```
+
+Должно вернуть LAN IP reverse proxy / NPM.
+
+## Важно по безопасности
+
+Не коммить реальные subscription token, UUID, приватные ключи и полные `vless://` ссылки в GitHub. В репозитории должен быть только `subscription.conf.example`, а реальный `/etc/podkop-remnawave/subscription.conf` хранится только на роутере.

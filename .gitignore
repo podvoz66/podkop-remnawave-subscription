@@ -1,0 +1,13 @@
+# Secrets
+subscription.conf
+*.secret
+*.token
+
+# Runtime files
+/tmp/
+*.log
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
