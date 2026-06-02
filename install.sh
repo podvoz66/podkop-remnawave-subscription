@@ -1,280 +1,264 @@
 #!/bin/sh
 set -eu
 
-REPO_UPDATER_URL="https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/update-podkop-from-remnawave.sh"
-PODKOP_INSTALL_URL="https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh"
+CONF='/etc/podkop-remnawave/subscription.conf'
 
-APP_DIR="/etc/podkop-remnawave"
-CONF="$APP_DIR/subscription.conf"
-UPDATER="/usr/bin/update-podkop-from-remnawave.sh"
-LOG="/tmp/podkop-sub-update.log"
-CRON_LINE="0 */4 * * * /usr/bin/update-podkop-from-remnawave.sh >/tmp/podkop-sub-update.log 2>&1"
-
-echo "=== Podkop + Remnawave installer for OpenWrt ==="
-
-if [ "$(id -u)" != "0" ]; then
-  echo "[ERROR] Run as root."
+if [ ! -f "$CONF" ]; then
+  echo "[ERROR] Missing config: $CONF"
+  echo "[ERROR] Expected it to contain: SUB_URL='https://...'"
   exit 1
 fi
 
-if [ ! -f /etc/openwrt_release ]; then
-  echo "[ERROR] This does not look like OpenWrt."
+. "$CONF"
+
+if [ -z "${SUB_URL:-}" ]; then
+  echo "[ERROR] SUB_URL is empty in $CONF"
   exit 1
 fi
 
-echo
-echo "[INFO] OpenWrt release:"
-cat /etc/openwrt_release || true
+UCI_CFG='podkop'
+MAIN_SEC='main'
+USA_SEC='USA'
+MANAGED_SUFFIX='-rwsub'
 
-if command -v apk >/dev/null 2>&1; then
-  PKG="apk"
-elif command -v opkg >/dev/null 2>&1; then
-  PKG="opkg"
+UA='Podkop-OpenWrt/1.0'
+TIMEOUT='25'
+
+TMP_SUB="/tmp/remnawave-sub.$$"
+TMP_TXT="/tmp/remnawave-sub.$$.txt"
+TMP_ALL="/tmp/remnawave-vless-all.$$.list"
+TMP_MAIN_SRC="/tmp/remnawave-vless-main-src.$$.list"
+TMP_USA_SRC="/tmp/remnawave-vless-usa-src.$$.list"
+TMP_MAIN_KEEP="/tmp/podkop-main-keep.$$.list"
+TMP_USA_KEEP="/tmp/podkop-usa-keep.$$.list"
+TMP_UCI="/tmp/podkop-uci.$$.batch"
+
+cleanup() {
+  rm -f "$TMP_SUB" "$TMP_TXT" "$TMP_ALL" "$TMP_MAIN_SRC" "$TMP_USA_SRC" "$TMP_MAIN_KEEP" "$TMP_USA_KEEP" "$TMP_UCI"
+}
+trap cleanup EXIT
+
+section_exists() {
+  sec="$1"
+  uci -q show "${UCI_CFG}.${sec}" >/dev/null 2>&1
+}
+
+ensure_section() {
+  sec="$1"
+
+  if ! section_exists "$sec"; then
+    echo "[INFO] Creating podkop.${sec} section"
+    anon="$(uci add "$UCI_CFG" section)"
+    uci rename "${UCI_CFG}.${anon}=${sec}"
+  fi
+}
+
+normalize_reality_links() {
+  sed '/security=reality/ { /[?&]spx=/! s/#/\&spx=%2F#/; }'
+}
+
+mark_managed_link() {
+  link="$1"
+
+  case "$link" in
+    *"${MANAGED_SUFFIX}") printf '%s\n' "$link" ;;
+    *\#*) printf '%s\n' "$(printf '%s' "$link" | sed "s/#\([^#[:space:]]*\)$/#\1${MANAGED_SUFFIX}/")" ;;
+    *) printf '%s\n' "${link}#rwsub" ;;
+  esac
+}
+
+is_managed_link() {
+  link="$1"
+
+  case "$link" in
+    *"${MANAGED_SUFFIX}"|*"#rwsub") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+strip_managed_marker() {
+  sed "s/${MANAGED_SUFFIX}$//; s/#rwsub$//"
+}
+
+collect_manual_links() {
+  sec="$1"
+  current_src_file="$2"
+  output_file="$3"
+
+  : > "$output_file"
+
+  if ! section_exists "$sec"; then
+    return 0
+  fi
+
+  uci -q get "${UCI_CFG}.${sec}.urltest_proxy_links" 2>/dev/null \
+    | tr ' ' '\n' \
+    | grep '^vless://' \
+    | while IFS= read -r link; do
+        [ -n "$link" ] || continue
+
+        if is_managed_link "$link"; then
+          continue
+        fi
+
+        norm="$(printf '%s\n' "$link" | strip_managed_marker)"
+
+        if grep -Fxq "$norm" "$current_src_file" 2>/dev/null; then
+          continue
+        fi
+
+        printf '%s\n' "$link"
+      done >> "$output_file" || true
+}
+
+write_urltest_section() {
+  sec="$1"
+  keep_file="$2"
+  managed_src_file="$3"
+
+  echo "set ${UCI_CFG}.${sec}.connection_type='proxy'"
+  echo "set ${UCI_CFG}.${sec}.proxy_config_type='urltest'"
+  echo "del ${UCI_CFG}.${sec}.proxy_string"
+  echo "del ${UCI_CFG}.${sec}.urltest_proxy_links"
+
+  if [ -s "$keep_file" ]; then
+    while IFS= read -r link; do
+      [ -n "$link" ] || continue
+      esc="$(printf "%s" "$link" | sed "s/'/'\\\\''/g")"
+      echo "add_list ${UCI_CFG}.${sec}.urltest_proxy_links='${esc}'"
+    done < "$keep_file"
+  fi
+
+  if [ -s "$managed_src_file" ]; then
+    while IFS= read -r link; do
+      [ -n "$link" ] || continue
+      marked="$(mark_managed_link "$link")"
+      esc="$(printf "%s" "$marked" | sed "s/'/'\\\\''/g")"
+      echo "add_list ${UCI_CFG}.${sec}.urltest_proxy_links='${esc}'"
+    done < "$managed_src_file"
+  fi
+
+  echo "set ${UCI_CFG}.${sec}.urltest_check_interval='3m'"
+  echo "set ${UCI_CFG}.${sec}.urltest_tolerance='50'"
+  echo "set ${UCI_CFG}.${sec}.urltest_testing_url='https://www.gstatic.com/generate_204'"
+}
+
+echo "[INFO] Downloading Remnawave subscription..."
+
+curl -fsSL \
+  --connect-timeout "$TIMEOUT" \
+  --max-time "$TIMEOUT" \
+  -H "User-Agent: $UA" \
+  -H "Accept: */*" \
+  "$SUB_URL" \
+  -o "$TMP_SUB"
+
+if grep -q 'vless://' "$TMP_SUB"; then
+  cp "$TMP_SUB" "$TMP_TXT"
 else
-  echo "[ERROR] Neither apk nor opkg found."
-  exit 1
-fi
-
-pkg_update() {
-  if [ "$PKG" = "apk" ]; then
-    apk update
+  if base64 -d "$TMP_SUB" > "$TMP_TXT" 2>/dev/null; then
+    :
   else
-    opkg update
-  fi
-}
-
-pkg_install_one() {
-  p="$1"
-
-  echo "[INFO] Installing package: $p"
-
-  if [ "$PKG" = "apk" ]; then
-    apk add "$p" || echo "[WARN] Package install failed or unavailable: $p"
-  else
-    opkg install "$p" || echo "[WARN] Package install failed or unavailable: $p"
-  fi
-}
-
-pkg_install_many() {
-  for p in "$@"; do
-    pkg_install_one "$p"
-  done
-}
-
-fetch() {
-  url="$1"
-  out="$2"
-
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$url" -o "$out"
-  elif command -v wget >/dev/null 2>&1; then
-    wget -O "$out" "$url"
-  else
-    echo "[ERROR] Need curl or wget."
+    echo "[ERROR] Cannot decode subscription as base64 and no vless:// found."
+    echo "[DEBUG] First 300 bytes:"
+    head -c 300 "$TMP_SUB" | sed 's/[^[:print:]\t]/?/g'
+    echo
     exit 1
   fi
-}
-
-read_from_tty() {
-  prompt="$1"
-  var_name="$2"
-
-  if [ -r /dev/tty ]; then
-    printf "%s" "$prompt" > /dev/tty
-    IFS= read -r value < /dev/tty
-  else
-    printf "%s" "$prompt"
-    IFS= read -r value
-  fi
-
-  eval "$var_name=\$value"
-}
-
-run_podkop_installer_non_interactive() {
-  echo "[INFO] Running Podkop installer in non-interactive mode..."
-  echo "[INFO] Auto-answering Podkop prompts with: y"
-
-  # The official Podkop installer may ask "Введите y или n" for Russian language.
-  # When our script is started as "wget -O - ... | sh", stdin is not interactive,
-  # so the Podkop installer can loop forever. This pipe feeds "y" repeatedly.
-  (
-    while true; do
-      printf 'y\n'
-      sleep 1
-    done
-  ) | sh /tmp/podkop-install.sh
-}
-
-echo
-echo "[STEP] Updating package lists..."
-pkg_update
-
-echo
-echo "[STEP] Installing base tools..."
-pkg_install_many ca-bundle ca-certificates curl wget grep sed coreutils-base64
-
-echo
-echo "[STEP] Installing Russian LuCI localization, best effort..."
-pkg_install_many \
-  luci-i18n-base-ru \
-  luci-i18n-firewall-ru \
-  luci-i18n-ttyd-ru \
-  luci-i18n-package-manager-ru \
-  luci-i18n-opkg-ru \
-  luci-i18n-uhttpd-ru
-
-echo
-echo "[STEP] Installing ttyd, best effort..."
-pkg_install_many ttyd luci-app-ttyd
-
-if [ -x /etc/init.d/ttyd ]; then
-  /etc/init.d/ttyd enable || true
-  /etc/init.d/ttyd restart || true
 fi
 
-echo
-echo "[STEP] Installing Podkop..."
+grep -Eo 'vless://[^[:space:]]+' "$TMP_TXT" \
+  | normalize_reality_links \
+  > "$TMP_ALL" || true
 
-if [ ! -f /etc/init.d/podkop ]; then
-  fetch "$PODKOP_INSTALL_URL" /tmp/podkop-install.sh
-  chmod +x /tmp/podkop-install.sh
+if [ ! -s "$TMP_ALL" ]; then
+  echo "[ERROR] No vless:// links found in subscription."
+  exit 1
+fi
 
-  if run_podkop_installer_non_interactive; then
-    echo "[OK] Podkop installer finished."
-  else
-    echo "[ERROR] Podkop install failed."
-    echo "[INFO] Check logs above. You may need to install Podkop manually, then rerun this installer."
-    exit 1
+USA_EXISTS=0
+if section_exists "$USA_SEC"; then
+  USA_EXISTS=1
+fi
+
+if [ "$USA_EXISTS" -eq 1 ]; then
+  grep -E '@us\.adeptpro\.online:443|#.*us|#.*US|#.*usa|#.*USA' "$TMP_ALL" > "$TMP_USA_SRC" || true
+  grep -Ev '@us\.adeptpro\.online:443|#.*us|#.*US|#.*usa|#.*USA' "$TMP_ALL" > "$TMP_MAIN_SRC" || true
+
+  if [ ! -s "$TMP_MAIN_SRC" ] && [ -s "$TMP_USA_SRC" ]; then
+    echo "[INFO] All Remnawave links look like USA links; main will preserve manual links only."
   fi
 else
-  echo "[INFO] Podkop already installed."
+  cp "$TMP_ALL" "$TMP_MAIN_SRC"
+  : > "$TMP_USA_SRC"
 fi
 
-if [ ! -f /etc/config/podkop ]; then
-  echo "[ERROR] /etc/config/podkop not found after Podkop installation."
+ALL_COUNT="$(wc -l < "$TMP_ALL" | tr -d ' ')"
+MAIN_RW_COUNT="$(wc -l < "$TMP_MAIN_SRC" | tr -d ' ')"
+USA_RW_COUNT="$(wc -l < "$TMP_USA_SRC" | tr -d ' ')"
+
+echo "[INFO] Found VLESS links total: $ALL_COUNT"
+echo "[INFO] USA section exists: $USA_EXISTS"
+echo "[INFO] Remnawave links for main: $MAIN_RW_COUNT"
+echo "[INFO] Remnawave links for USA: $USA_RW_COUNT"
+
+if [ "$ALL_COUNT" -lt 1 ]; then
+  echo "[ERROR] Subscription contains no VLESS links. Refusing to apply."
   exit 1
 fi
 
-echo
-echo "[STEP] Remnawave subscription URL"
-
-if [ -n "${SUB_URL:-}" ]; then
-  REMNA_SUB_URL="$SUB_URL"
-else
-  read_from_tty "Paste Remnawave subscription URL: " REMNA_SUB_URL
-fi
-
-if [ -z "$REMNA_SUB_URL" ]; then
-  echo "[ERROR] Empty subscription URL."
+if [ "$USA_EXISTS" -eq 0 ] && [ "$MAIN_RW_COUNT" -lt 1 ]; then
+  echo "[ERROR] main would receive zero Remnawave links. Refusing to apply."
   exit 1
 fi
 
-case "$REMNA_SUB_URL" in
-  http://*|https://*) ;;
-  *)
-    echo "[ERROR] Subscription URL must start with http:// or https://"
-    exit 1
-    ;;
-esac
+BACKUP="/etc/config/podkop.backup.$(date +%Y%m%d-%H%M%S)"
+cp /etc/config/podkop "$BACKUP"
+echo "[INFO] Backup saved: $BACKUP"
 
-mkdir -p "$APP_DIR/backups"
-chmod 700 "$APP_DIR" "$APP_DIR/backups"
+ensure_section "$MAIN_SEC"
 
-STAMP="$(date +%Y%m%d-%H%M%S)"
+collect_manual_links "$MAIN_SEC" "$TMP_MAIN_SRC" "$TMP_MAIN_KEEP"
 
-if [ -f "$CONF" ]; then
-  cp "$CONF" "$APP_DIR/backups/subscription.conf.backup.$STAMP"
+if [ "$USA_EXISTS" -eq 1 ]; then
+  collect_manual_links "$USA_SEC" "$TMP_USA_SRC" "$TMP_USA_KEEP"
 fi
 
-if [ -f "$UPDATER" ]; then
-  cp "$UPDATER" "$APP_DIR/backups/update-podkop-from-remnawave.sh.backup.$STAMP"
+MAIN_MANUAL_COUNT="$(wc -l < "$TMP_MAIN_KEEP" | tr -d ' ')"
+USA_MANUAL_COUNT=0
+
+if [ "$USA_EXISTS" -eq 1 ]; then
+  USA_MANUAL_COUNT="$(wc -l < "$TMP_USA_KEEP" | tr -d ' ')"
 fi
 
-cp /etc/config/podkop "$APP_DIR/backups/podkop.config.backup.$STAMP"
+echo "[INFO] Preserved manual links in main: $MAIN_MANUAL_COUNT"
 
-cat >"$CONF" <<EOF
-SUB_URL='$REMNA_SUB_URL'
-EOF
+if [ "$USA_EXISTS" -eq 1 ]; then
+  echo "[INFO] Preserved manual links in USA: $USA_MANUAL_COUNT"
+fi
 
-chmod 600 "$CONF"
+{
+  write_urltest_section "$MAIN_SEC" "$TMP_MAIN_KEEP" "$TMP_MAIN_SRC"
 
-echo
-echo "[STEP] Optional split-DNS override"
+  if [ "$USA_EXISTS" -eq 1 ]; then
+    write_urltest_section "$USA_SEC" "$TMP_USA_KEEP" "$TMP_USA_SRC"
+  fi
 
-if [ -n "${SUB_HOST_IP:-}" ]; then
-  SUB_HOST="$(printf '%s' "$REMNA_SUB_URL" | sed -E 's#^https?://([^/:]+).*#\1#')"
+  echo "commit ${UCI_CFG}"
+} > "$TMP_UCI"
 
-  echo "[INFO] Adding DNS override: $SUB_HOST -> $SUB_HOST_IP"
+uci -q batch < "$TMP_UCI"
 
-  uci add dhcp domain >/dev/null
-  uci set dhcp.@domain[-1].name="$SUB_HOST"
-  uci set dhcp.@domain[-1].ip="$SUB_HOST_IP"
-  uci commit dhcp
-  /etc/init.d/dnsmasq restart || true
+echo "[INFO] Restarting Podkop..."
+/etc/init.d/podkop restart
+
+sleep 10
+
+if pgrep -af sing-box >/dev/null 2>&1; then
+  echo "[OK] sing-box is running."
 else
-  echo "[INFO] No SUB_HOST_IP provided. Skipping split-DNS override."
-  echo "[INFO] If your subscription domain points to router WAN/public IP from LAN, rerun with:"
-  echo "       SUB_HOST_IP='192.168.0.172' wget -O - https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/install.sh | sh"
+  echo "[WARN] sing-box process was not found after restart."
+  echo "[WARN] Check: logread | grep -iE 'podkop|sing-box|error|failed|fatal|panic' | tail -n 120"
 fi
 
-echo
-echo "[STEP] Installing Remnawave updater..."
-
-if fetch "$REPO_UPDATER_URL" "$UPDATER"; then
-  chmod +x "$UPDATER"
-else
-  echo "[ERROR] Failed to download updater from GitHub:"
-  echo "$REPO_UPDATER_URL"
-  exit 1
-fi
-
-echo
-echo "[STEP] Installing cron job..."
-
-grep -v 'update-podkop-from-remnawave.sh' /etc/crontabs/root 2>/dev/null > /tmp/root.cron.$$ || true
-echo "$CRON_LINE" >> /tmp/root.cron.$$
-cat /tmp/root.cron.$$ > /etc/crontabs/root
-rm -f /tmp/root.cron.$$
-
-/etc/init.d/cron restart || true
-
-echo
-echo "[STEP] First Remnawave update..."
-
-if "$UPDATER" >"$LOG" 2>&1; then
-  cat "$LOG"
-else
-  echo "[ERROR] First update failed. Log:"
-  cat "$LOG" || true
-  exit 1
-fi
-
-echo
-echo "=== Verification ==="
-
-echo
-echo "[INFO] sing-box:"
-pgrep -af sing-box || true
-
-echo
-echo "[INFO] listeners:"
-netstat -lntup 2>/dev/null | grep -E '1602|9090|sing|podkop' || true
-
-echo
-echo "[INFO] Podkop main links:"
-uci show podkop.main 2>/dev/null | grep 'urltest_proxy_links' || true
-
-echo
-echo "[INFO] Podkop USA links, if section exists:"
-uci show podkop.USA 2>/dev/null | grep 'urltest_proxy_links' || true
-
-echo
-echo "[INFO] cron:"
-grep 'update-podkop-from-remnawave.sh' /etc/crontabs/root || true
-
-echo
-echo "[OK] Installation complete."
-echo "[INFO] Config: $CONF"
-echo "[INFO] Updater: $UPDATER"
-echo "[INFO] Log: $LOG"
-echo "[INFO] Backups: $APP_DIR/backups"
+echo "[OK] Podkop updated from Remnawave subscription."
