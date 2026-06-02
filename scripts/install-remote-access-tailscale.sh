@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+# Version: tailscale-remote-access-v2
+
 echo "=== OpenWrt remote access via Tailscale ==="
 
 if [ "$(id -u)" != "0" ]; then
