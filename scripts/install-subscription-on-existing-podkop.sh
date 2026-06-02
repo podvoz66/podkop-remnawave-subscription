@@ -10,7 +10,9 @@ CRON_LINE="0 */4 * * * /usr/bin/update-podkop-from-remnawave.sh >/tmp/podkop-sub
 REPO_UPDATER_URL="https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/update-podkop-from-remnawave.sh"
 PODKOP_INSTALL_URL="https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh"
 
-echo "=== Existing OpenWrt Podkop -> Remnawave subscription installer ==="
+UPDATE_PODKOP="${UPDATE_PODKOP:-0}"
+
+echo "=== Existing OpenWrt Podkop -> Remnawave subscription sync ==="
 
 if [ "$(id -u)" != "0" ]; then
   echo "[ERROR] Run as root."
@@ -86,18 +88,6 @@ read_from_tty() {
   eval "$var_name=\$value"
 }
 
-run_podkop_installer_non_interactive() {
-  echo "[INFO] Running Podkop installer/update in non-interactive mode..."
-  echo "[INFO] Auto-answering Podkop prompts with: y"
-
-  (
-    while true; do
-      printf 'y\n'
-      sleep 1
-    done
-  ) | sh /tmp/podkop-install.sh
-}
-
 validate_subscription_before_apply() {
   url="$1"
   tmp="/tmp/remnawave-sub-validate.$$"
@@ -141,11 +131,13 @@ validate_subscription_before_apply() {
     exit 1
   fi
 
-  LINK_COUNT="$(grep -Eo '(vless|ss)://[^[:space:]]+' "$txt" | wc -l | tr -d ' ')"
-  VLESS_COUNT="$(grep -Eo 'vless://[^[:space:]]+' "$txt" | wc -l | tr -d ' ')"
-  SS_COUNT="$(grep -Eo 'ss://[^[:space:]]+' "$txt" | wc -l | tr -d ' ')"
+  grep -Eo '(vless|ss)://[^[:space:]]+' "$txt" > /tmp/remnawave-links-validate.$$ || true
 
-  rm -f "$tmp" "$txt"
+  LINK_COUNT="$(wc -l < /tmp/remnawave-links-validate.$$ | tr -d ' ')"
+  VLESS_COUNT="$(grep -c '^vless://' /tmp/remnawave-links-validate.$$ 2>/dev/null || true)"
+  SS_COUNT="$(grep -c '^ss://' /tmp/remnawave-links-validate.$$ 2>/dev/null || true)"
+
+  rm -f "$tmp" "$txt" /tmp/remnawave-links-validate.$$
 
   if [ "$LINK_COUNT" -lt 1 ]; then
     echo "[ERROR] Subscription contains no vless:// or ss:// links."
@@ -156,6 +148,26 @@ validate_subscription_before_apply() {
   echo "[INFO] Total links: $LINK_COUNT"
   echo "[INFO] VLESS links: $VLESS_COUNT"
   echo "[INFO] Shadowsocks links: $SS_COUNT"
+}
+
+run_podkop_installer_non_interactive() {
+  echo "[INFO] Running Podkop installer/update in non-interactive mode..."
+  echo "[INFO] Auto-answering Podkop prompts with: y"
+  echo "[INFO] Timeout: 900 seconds"
+
+  fetch "$PODKOP_INSTALL_URL" /tmp/podkop-install.sh
+  chmod +x /tmp/podkop-install.sh
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 900 sh -c "while true; do printf 'y\n'; sleep 1; done | sh /tmp/podkop-install.sh"
+  else
+    (
+      while true; do
+        printf 'y\n'
+        sleep 1
+      done
+    ) | sh /tmp/podkop-install.sh
+  fi
 }
 
 if [ ! -f /etc/config/podkop ]; then
@@ -211,36 +223,17 @@ STAMP="$(date +%Y%m%d-%H%M%S)"
 echo
 echo "[STEP] Backup current Podkop and Remnawave updater state..."
 
-cp /etc/config/podkop "$APP_DIR/backups/podkop.config.before-existing-install.$STAMP"
+cp /etc/config/podkop "$APP_DIR/backups/podkop.config.before-existing-sync.$STAMP"
 
 if [ -f "$CONF" ]; then
-  cp "$CONF" "$APP_DIR/backups/subscription.conf.before-existing-install.$STAMP"
+  cp "$CONF" "$APP_DIR/backups/subscription.conf.before-existing-sync.$STAMP"
 fi
 
 if [ -f "$UPDATER" ]; then
-  cp "$UPDATER" "$APP_DIR/backups/update-podkop-from-remnawave.before-existing-install.$STAMP"
+  cp "$UPDATER" "$APP_DIR/backups/update-podkop-from-remnawave.before-existing-sync.$STAMP"
 fi
 
 echo "[INFO] Backup dir: $APP_DIR/backups"
-
-echo
-echo "[STEP] Updating Podkop, best effort..."
-
-fetch "$PODKOP_INSTALL_URL" /tmp/podkop-install.sh
-chmod +x /tmp/podkop-install.sh
-
-if run_podkop_installer_non_interactive; then
-  echo "[OK] Podkop installer/update finished."
-else
-  echo "[WARN] Podkop installer returned an error."
-  echo "[WARN] Existing Podkop config backup is saved."
-  echo "[WARN] Continuing with Remnawave updater installation."
-fi
-
-if [ ! -f /etc/config/podkop ]; then
-  echo "[ERROR] /etc/config/podkop disappeared after Podkop update. Stop."
-  exit 1
-fi
 
 cat >"$CONF" <<EOF
 SUB_URL='$REMNA_SUB_URL'
@@ -281,6 +274,27 @@ rm -f /tmp/root.cron.$$
 
 /etc/init.d/cron restart || true
 
+if [ "$UPDATE_PODKOP" = "1" ]; then
+  echo
+  echo "[STEP] Updating Podkop because UPDATE_PODKOP=1..."
+
+  if run_podkop_installer_non_interactive; then
+    echo "[OK] Podkop installer/update finished."
+  else
+    echo "[WARN] Podkop installer/update failed or timed out."
+    echo "[WARN] Continuing with Remnawave subscription sync."
+  fi
+
+  if [ ! -f /etc/config/podkop ]; then
+    echo "[ERROR] /etc/config/podkop disappeared after Podkop update. Stop."
+    exit 1
+  fi
+else
+  echo
+  echo "[INFO] Skipping Podkop package update by default."
+  echo "[INFO] To update Podkop too, run with UPDATE_PODKOP=1."
+fi
+
 echo
 echo "[STEP] First Remnawave update..."
 
@@ -320,7 +334,8 @@ echo "[INFO] cron:"
 grep 'update-podkop-from-remnawave.sh' /etc/crontabs/root || true
 
 echo
-echo "[OK] Existing Podkop router updated and connected to Remnawave subscription."
+echo "[OK] Existing Podkop router synced with Remnawave subscription."
+echo "[INFO] Podkop package update was skipped unless UPDATE_PODKOP=1 was used."
 echo "[INFO] Config: $CONF"
 echo "[INFO] Updater: $UPDATER"
 echo "[INFO] Log: $LOG"
