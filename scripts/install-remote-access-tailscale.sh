@@ -190,4 +190,3 @@ echo
 echo "[SECURITY] No WAN ports were opened."
 echo "[SECURITY] Keep SSH/LuCI closed from WAN; use Tailscale IP for remote access."
 
-# EOF
