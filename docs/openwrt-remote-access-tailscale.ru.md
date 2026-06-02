@@ -311,3 +311,5 @@ chmod +x /tmp/remote.sh &&
 TAILSCALE_AUTHKEY="$TAILSCALE_AUTHKEY" TAILSCALE_HOSTNAME="$TAILSCALE_HOSTNAME" sh /tmp/remote.sh
 '
 ```
+
+<!-- EOF -->

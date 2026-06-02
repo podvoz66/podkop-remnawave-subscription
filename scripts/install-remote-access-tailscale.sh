@@ -189,3 +189,5 @@ echo "  http://TAILSCALE_IP:9090/  # YACD / sing-box API, if enabled"
 echo
 echo "[SECURITY] No WAN ports were opened."
 echo "[SECURITY] Keep SSH/LuCI closed from WAN; use Tailscale IP for remote access."
+
+# EOF
