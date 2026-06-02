@@ -1,4 +1,3 @@
-````md
 # Удалённый доступ к OpenWrt-роутеру через Tailscale
 
 Инструкция для удалённого доступа к OpenWrt-роутеру без открытия портов в WAN.
@@ -17,7 +16,7 @@
 
 ```text
 https://github.com/podvoz66/podkop-remnawave-subscription
-````
+```
 
 ---
 
@@ -78,9 +77,9 @@ tskey-auth-xxxxxxxxxxxxxxxx
 
 Важно:
 
-* не добавлять `tskey-auth-...` в GitHub;
-* не отправлять ключ в публичные чаты;
-* после настройки всех роутеров можно удалить или отключить auth key в Tailscale Admin Console.
+- не добавлять `tskey-auth-...` в GitHub;
+- не отправлять ключ в публичные чаты;
+- после настройки всех роутеров можно удалить или отключить auth key в Tailscale Admin Console.
 
 ---
 
@@ -312,128 +311,3 @@ chmod +x /tmp/remote.sh &&
 TAILSCALE_AUTHKEY="$TAILSCALE_AUTHKEY" TAILSCALE_HOSTNAME="$TAILSCALE_HOSTNAME" sh /tmp/remote.sh
 '
 ```
-
-````
-
----
-
-## 3. Что добавить в `README.ru.md`
-
-Текущий `README.ru.md` устарел: там указано, что скрипт извлекает только `vless://`, хотя фактически уже нужны `vless://` и `ss://`, а также отдельный Tailscale-раздел. :contentReference[oaicite:1]{index=1}
-
-Добавь в конец `README.ru.md` вот этот блок:
-
-```md
-## Удалённый доступ к OpenWrt через Tailscale
-
-Для удалённого доступа к роутеру без открытия WAN-портов используется Tailscale.
-
-Скрипт:
-
-```text
-scripts/install-remote-access-tailscale.sh
-````
-
-Документация:
-
-```text
-docs/openwrt-remote-access-tailscale.ru.md
-```
-
-Быстрый запуск:
-
-```sh
-wget -O /tmp/remote.sh \
-  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/install-remote-access-tailscale.sh
-
-chmod +x /tmp/remote.sh
-
-sh /tmp/remote.sh
-```
-
-Скрипт отдельно спросит:
-
-```text
-Tailscale auth key
-Tailscale router name
-```
-
-Рекомендуемые параметры auth key в Tailscale:
-
-```text
-Reusable: ON
-Ephemeral: OFF
-Tags: OFF
-Expiration: 90 days
-```
-
-После настройки:
-
-```sh
-tailscale status
-tailscale ip -4
-```
-
-Подключение:
-
-```sh
-ssh root@TAILSCALE_IP
-```
-
-LuCI:
-
-```text
-http://TAILSCALE_IP/
-```
-
-````
-
----
-
-## Команды для сохранения на GitHub с Windows
-
-```powershell
-cd C:\Users\Podvoz\Downloads\podkop-remnawave-subscription\podkop-remnawave-subscription
-
-notepad .\scripts\install-remote-access-tailscale.sh
-notepad .\docs\openwrt-remote-access-tailscale.ru.md
-notepad .\README.ru.md
-````
-
-После замены:
-
-```powershell
-$files = @(
-  ".\scripts\install-remote-access-tailscale.sh",
-  ".\docs\openwrt-remote-access-tailscale.ru.md",
-  ".\README.ru.md"
-)
-
-foreach ($f in $files) {
-  $s = Get-Content $f -Raw -Encoding UTF8
-  $s = $s -replace "`r`n", "`n"
-  $s = $s.TrimStart([char]0xFEFF)
-  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-  [System.IO.File]::WriteAllText((Resolve-Path $f), $s, $utf8NoBom)
-}
-
-git status
-git add .\scripts\install-remote-access-tailscale.sh .\docs\openwrt-remote-access-tailscale.ru.md .\README.ru.md
-git commit -m "Document and improve Tailscale remote access"
-git pull --rebase origin main
-git push
-```
-
-После push проверь на роутере:
-
-```sh
-wget -O /tmp/remote.sh \
-  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/install-remote-access-tailscale.sh
-
-wc -l /tmp/remote.sh
-head -n 20 /tmp/remote.sh
-```
-
-Ожидаемо: много строк, начало с `#!/bin/sh`, затем `set -eu`, а не одна длинная строка.
-
-[1]: https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/README.ru.md "raw.githubusercontent.com"
