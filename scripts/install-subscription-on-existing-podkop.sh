@@ -13,72 +13,195 @@ PODKOP_INSTALL_URL="https://raw.githubusercontent.com/itdoginfo/podkop/main/inst
 echo "=== Existing OpenWrt Podkop -> Remnawave subscription installer ==="
 
 if [ "$(id -u)" != "0" ]; then
-echo "[ERROR] Run as root."
-exit 1
+  echo "[ERROR] Run as root."
+  exit 1
 fi
 
 if [ ! -f /etc/openwrt_release ]; then
-echo "[ERROR] This does not look like OpenWrt."
-exit 1
+  echo "[ERROR] This does not look like OpenWrt."
+  exit 1
 fi
 
 echo
 echo "[INFO] OpenWrt release:"
 cat /etc/openwrt_release || true
 
-if [ ! -f /etc/config/podkop ]; then
-echo "[ERROR] /etc/config/podkop not found."
-echo "[ERROR] This script is for routers where Podkop is already installed."
-echo "[INFO] For clean routers use install.sh from this repository."
-exit 1
-fi
-
 if command -v apk >/dev/null 2>&1; then
-PKG="apk"
+  PKG="apk"
 elif command -v opkg >/dev/null 2>&1; then
-PKG="opkg"
+  PKG="opkg"
 else
-echo "[ERROR] Neither apk nor opkg found."
-exit 1
+  echo "[ERROR] Neither apk nor opkg found."
+  exit 1
 fi
 
 pkg_update() {
-if [ "$PKG" = "apk" ]; then
-apk update
-else
-opkg update
-fi
+  if [ "$PKG" = "apk" ]; then
+    apk update
+  else
+    opkg update
+  fi
 }
 
 pkg_install_one() {
-p="$1"
+  p="$1"
 
-if command -v "$p" >/dev/null 2>&1; then
-return 0
-fi
+  echo "[INFO] Installing package: $p"
 
-echo "[INFO] Installing package: $p"
-
-if [ "$PKG" = "apk" ]; then
-apk add "$p" || echo "[WARN] Package install failed or unavailable: $p"
-else
-opkg install "$p" || echo "[WARN] Package install failed or unavailable: $p"
-fi
+  if [ "$PKG" = "apk" ]; then
+    apk add "$p" || echo "[WARN] Package install failed or unavailable: $p"
+  else
+    opkg install "$p" || echo "[WARN] Package install failed or unavailable: $p"
+  fi
 }
 
 fetch() {
-url="$1"
-out="$2"
+  url="$1"
+  out="$2"
 
-if command -v curl >/dev/null 2>&1; then
-curl -fsSL "$url" -o "$out"
-elif command -v wget >/dev/null 2>&1; then
-wget -O "$out" "$url"
-else
-echo "[ERROR] Need curl or wget."
-exit 1
-fi
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$url" -o "$out"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -O "$out" "$url"
+  else
+    echo "[ERROR] Need curl or wget."
+    exit 1
+  fi
 }
+
+read_from_tty() {
+  prompt="$1"
+  var_name="$2"
+
+  if [ -r /dev/tty ]; then
+    printf "%s" "$prompt" > /dev/tty
+    IFS= read -r value < /dev/tty
+  else
+    echo "[ERROR] No interactive terminal available."
+    echo "[ERROR] Run with SUB_URL variable, for example:"
+    echo "SUB_URL='https://sub.example/token' sh /tmp/install-subscription-on-existing-podkop.sh"
+    exit 1
+  fi
+
+  eval "$var_name=\$value"
+}
+
+run_podkop_installer_non_interactive() {
+  echo "[INFO] Running Podkop installer/update in non-interactive mode..."
+  echo "[INFO] Auto-answering Podkop prompts with: y"
+
+  (
+    while true; do
+      printf 'y\n'
+      sleep 1
+    done
+  ) | sh /tmp/podkop-install.sh
+}
+
+validate_subscription_before_apply() {
+  url="$1"
+  tmp="/tmp/remnawave-sub-validate.$$"
+  txt="/tmp/remnawave-sub-validate.$$.txt"
+
+  echo
+  echo "[STEP] Validating Remnawave subscription before touching Podkop..."
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL \
+      --connect-timeout 25 \
+      --max-time 25 \
+      -H "User-Agent: Podkop-OpenWrt/1.0" \
+      -H "Accept: */*" \
+      "$url" \
+      -o "$tmp"
+  else
+    wget -O "$tmp" "$url"
+  fi
+
+  if grep -Eq '(vless|ss)://' "$tmp"; then
+    cp "$tmp" "$txt"
+  else
+    if base64 -d "$tmp" > "$txt" 2>/dev/null; then
+      :
+    else
+      echo "[ERROR] Subscription is not plain links and not valid base64."
+      echo "[DEBUG] First 300 bytes:"
+      head -c 300 "$tmp" | sed 's/[^[:print:]\t]/?/g'
+      echo
+      rm -f "$tmp" "$txt"
+      exit 1
+    fi
+  fi
+
+  if grep -Eq '@0\.0\.0\.0:1|00000000-0000-0000-0000-000000000000|App%20not%20supported|App not supported' "$txt"; then
+    echo "[ERROR] Subscription returned placeholder / App not supported link."
+    echo "[ERROR] Refusing to continue. Fix Remnawave HWID/user/squad/hosts/settings first."
+    grep -E '@0\.0\.0\.0:1|00000000-0000-0000-0000-000000000000|App%20not%20supported|App not supported' "$txt" | sed 's/\?.*/?.../'
+    rm -f "$tmp" "$txt"
+    exit 1
+  fi
+
+  LINK_COUNT="$(grep -Eo '(vless|ss)://[^[:space:]]+' "$txt" | wc -l | tr -d ' ')"
+  VLESS_COUNT="$(grep -Eo 'vless://[^[:space:]]+' "$txt" | wc -l | tr -d ' ')"
+  SS_COUNT="$(grep -Eo 'ss://[^[:space:]]+' "$txt" | wc -l | tr -d ' ')"
+
+  rm -f "$tmp" "$txt"
+
+  if [ "$LINK_COUNT" -lt 1 ]; then
+    echo "[ERROR] Subscription contains no vless:// or ss:// links."
+    exit 1
+  fi
+
+  echo "[OK] Subscription is valid."
+  echo "[INFO] Total links: $LINK_COUNT"
+  echo "[INFO] VLESS links: $VLESS_COUNT"
+  echo "[INFO] Shadowsocks links: $SS_COUNT"
+}
+
+if [ ! -f /etc/config/podkop ]; then
+  echo "[ERROR] /etc/config/podkop not found."
+  echo "[ERROR] This script is for routers where Podkop is already installed."
+  echo "[INFO] For clean routers use install.sh from this repository."
+  exit 1
+fi
+
+echo
+echo "[STEP] Remnawave subscription URL"
+
+if [ -n "${SUB_URL:-}" ]; then
+  REMNA_SUB_URL="$SUB_URL"
+else
+  read_from_tty "Paste Remnawave subscription URL: " REMNA_SUB_URL
+fi
+
+if [ -z "$REMNA_SUB_URL" ]; then
+  echo "[ERROR] Empty subscription URL."
+  exit 1
+fi
+
+case "$REMNA_SUB_URL" in
+  http://*|https://*) ;;
+  *)
+    echo "[ERROR] Subscription URL must start with http:// or https://"
+    exit 1
+    ;;
+esac
+
+echo
+echo "[STEP] Updating package lists..."
+pkg_update
+
+echo
+echo "[STEP] Installing base tools..."
+pkg_install_one ca-bundle
+pkg_install_one ca-certificates
+pkg_install_one curl
+pkg_install_one wget
+pkg_install_one grep
+pkg_install_one sed
+pkg_install_one coreutils-base64
+
+validate_subscription_before_apply "$REMNA_SUB_URL"
 
 mkdir -p "$APP_DIR/backups"
 chmod 700 "$APP_DIR" "$APP_DIR/backups"
@@ -91,27 +214,14 @@ echo "[STEP] Backup current Podkop and Remnawave updater state..."
 cp /etc/config/podkop "$APP_DIR/backups/podkop.config.before-existing-install.$STAMP"
 
 if [ -f "$CONF" ]; then
-cp "$CONF" "$APP_DIR/backups/subscription.conf.before-existing-install.$STAMP"
+  cp "$CONF" "$APP_DIR/backups/subscription.conf.before-existing-install.$STAMP"
 fi
 
 if [ -f "$UPDATER" ]; then
-cp "$UPDATER" "$APP_DIR/backups/update-podkop-from-remnawave.before-existing-install.$STAMP"
+  cp "$UPDATER" "$APP_DIR/backups/update-podkop-from-remnawave.before-existing-install.$STAMP"
 fi
 
 echo "[INFO] Backup dir: $APP_DIR/backups"
-
-echo
-echo "[STEP] Updating package lists..."
-pkg_update
-
-echo
-echo "[STEP] Installing base tools..."
-pkg_install_one curl
-pkg_install_one wget
-pkg_install_one grep
-pkg_install_one sed
-pkg_install_one ca-bundle
-pkg_install_one ca-certificates
 
 echo
 echo "[STEP] Updating Podkop, best effort..."
@@ -119,41 +229,18 @@ echo "[STEP] Updating Podkop, best effort..."
 fetch "$PODKOP_INSTALL_URL" /tmp/podkop-install.sh
 chmod +x /tmp/podkop-install.sh
 
-if sh /tmp/podkop-install.sh; then
-echo "[OK] Podkop installer/update finished."
+if run_podkop_installer_non_interactive; then
+  echo "[OK] Podkop installer/update finished."
 else
-echo "[WARN] Podkop installer returned an error."
-echo "[WARN] Existing Podkop config backup is saved."
-echo "[WARN] Continuing with Remnawave updater installation."
+  echo "[WARN] Podkop installer returned an error."
+  echo "[WARN] Existing Podkop config backup is saved."
+  echo "[WARN] Continuing with Remnawave updater installation."
 fi
 
 if [ ! -f /etc/config/podkop ]; then
-echo "[ERROR] /etc/config/podkop disappeared after Podkop update. Stop."
-exit 1
+  echo "[ERROR] /etc/config/podkop disappeared after Podkop update. Stop."
+  exit 1
 fi
-
-echo
-echo "[STEP] Remnawave subscription URL"
-
-if [ -n "${SUB_URL:-}" ]; then
-REMNA_SUB_URL="$SUB_URL"
-else
-printf "Paste Remnawave subscription URL: "
-read -r REMNA_SUB_URL
-fi
-
-if [ -z "$REMNA_SUB_URL" ]; then
-echo "[ERROR] Empty subscription URL."
-exit 1
-fi
-
-case "$REMNA_SUB_URL" in
-http://*|https://*) ;;
-*)
-echo "[ERROR] Subscription URL must start with http:// or https://"
-exit 1
-;;
-esac
 
 cat >"$CONF" <<EOF
 SUB_URL='$REMNA_SUB_URL'
@@ -165,17 +252,17 @@ echo
 echo "[STEP] Optional split-DNS override"
 
 if [ -n "${SUB_HOST_IP:-}" ]; then
-SUB_HOST="$(printf '%s' "$REMNA_SUB_URL" | sed -E 's#^https?://([^/:]+).*#\1#')"
+  SUB_HOST="$(printf '%s' "$REMNA_SUB_URL" | sed -E 's#^https?://([^/:]+).*#\1#')"
 
-echo "[INFO] Adding DNS override: $SUB_HOST -> $SUB_HOST_IP"
+  echo "[INFO] Adding DNS override: $SUB_HOST -> $SUB_HOST_IP"
 
-uci add dhcp domain >/dev/null
-uci set dhcp.@domain[-1].name="$SUB_HOST"
-uci set dhcp.@domain[-1].ip="$SUB_HOST_IP"
-uci commit dhcp
-/etc/init.d/dnsmasq restart || true
+  uci add dhcp domain >/dev/null
+  uci set dhcp.@domain[-1].name="$SUB_HOST"
+  uci set dhcp.@domain[-1].ip="$SUB_HOST_IP"
+  uci commit dhcp
+  /etc/init.d/dnsmasq restart || true
 else
-echo "[INFO] No SUB_HOST_IP provided. Skipping split-DNS override."
+  echo "[INFO] No SUB_HOST_IP provided. Skipping split-DNS override."
 fi
 
 echo
@@ -198,11 +285,11 @@ echo
 echo "[STEP] First Remnawave update..."
 
 if "$UPDATER" >"$LOG" 2>&1; then
-cat "$LOG"
+  cat "$LOG"
 else
-echo "[ERROR] First update failed. Log:"
-cat "$LOG" || true
-exit 1
+  echo "[ERROR] First update failed. Log:"
+  cat "$LOG" || true
+  exit 1
 fi
 
 echo
@@ -223,6 +310,10 @@ uci show podkop.main 2>/dev/null | grep 'urltest_proxy_links' || true
 echo
 echo "[INFO] Podkop USA links, if section exists:"
 uci show podkop.USA 2>/dev/null | grep 'urltest_proxy_links' || true
+
+echo
+echo "[INFO] Managed links summary:"
+uci show podkop.main 2>/dev/null | grep 'urltest_proxy_links' | sed 's/ /\n/g' | grep -E 'vless://|ss://' || true
 
 echo
 echo "[INFO] cron:"
