@@ -1,478 +1,313 @@
-\# Обновление существующего OpenWrt-роутера с уже установленным Podkop
+# Удалённый доступ к OpenWrt-роутеру через Tailscale
 
+Инструкция для удалённого доступа к OpenWrt-роутеру без открытия портов в WAN.
 
+Подходит для:
 
-Инструкция для роутеров OpenWrt 24.10.x, на которых Podkop уже установлен и настроен.
-
-
-
-Цель: обновить Podkop и добавить автообновление ключей из Remnawave-подписки, не стирая ручные ключи пользователя.
-
-
+- OpenWrt 24.10.x;
+- Xiaomi AX300T;
+- NanoPi R3S;
+- роутеров за NAT;
+- роутеров без белого IP;
+- роутеров с установленным Podkop;
+- роутеров, где нужно удалённо обслуживать Podkop и Remnawave-подписку.
 
 Репозиторий проекта:
 
-
-
 ```text
-
 https://github.com/podvoz66/podkop-remnawave-subscription
-
 ```
 
+---
 
-
-\---
-
-
-
-\## Когда использовать эту инструкцию
-
-
-
-Использовать для роутеров, где уже есть Podkop:
-
-
-
-```sh
-
-test -f /etc/config/podkop \&\& echo "Podkop config exists"
-
-```
-
-
-
-Для полностью чистого роутера использовать другую инструкцию:
-
-
-
-```text
-
-docs/openwrt-router-install.ru.md
-
-```
-
-
-
-\---
-
-
-
-\## Что нужно заранее
-
-
-
-1\. Роутер с OpenWrt 24.10.x.
-
-2\. Уже установленный Podkop.
-
-3\. SSH-доступ к роутеру под `root`.
-
-4\. Отдельный пользователь в Remnawave для этого роутера.
-
-5\. Subscription URL этого пользователя.
-
-
-
-Рекомендуемая подписка для роутера:
-
-
-
-\* VLESS TCP REALITY;
-
-\* direct/router nodes;
-
-\* без mobile/XHTTP/SS, если они не нужны этому роутеру.
-
-
-
-\---
-
-
-
-\## Основная команда
-
-
-
-На роутере выполнить:
-
-
-
-```sh
-
-wget -O - https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/install-subscription-on-existing-podkop.sh | sh
-
-```
-
-
-
-Скрипт спросит:
-
-
-
-```text
-
-Paste Remnawave subscription URL:
-
-```
-
-
-
-Вставить ссылку подписки пользователя из Remnawave:
-
-
-
-```text
-
-https://sub.adeptpro.online/НОВЫЙ\_TOKEN
-
-```
-
-
-
-\---
-
-
-
-\## Вариант одной строкой
-
-
-
-```sh
-
-SUB\_URL='https://sub.adeptpro.online/НОВЫЙ\_TOKEN' wget -O - https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/install-subscription-on-existing-podkop.sh | sh
-
-```
-
-
-
-Безопаснее использовать основной вариант, чтобы token не попадал в историю shell.
-
-
-
-\---
-
-
-
-\## Если роутер находится в домашней сети с Nginx Proxy Manager
-
-
-
-Если `sub.adeptpro.online` внутри LAN должен открываться через NPM на `192.168.0.172`, использовать:
-
-
-
-```sh
-
-SUB\_HOST\_IP='192.168.0.172' wget -O - https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/install-subscription-on-existing-podkop.sh | sh
-
-```
-
-
-
-Или вместе с подпиской:
-
-
-
-```sh
-
-SUB\_URL='https://sub.adeptpro.online/НОВЫЙ\_TOKEN' SUB\_HOST\_IP='192.168.0.172' wget -O - https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/install-subscription-on-existing-podkop.sh | sh
-
-```
-
-
-
-\---
-
-
-
-\## Что делает скрипт
-
-
+## Что делает скрипт
 
 Скрипт:
 
+1. устанавливает пакет `tailscale`;
+2. включает автозапуск Tailscale;
+3. запускает `tailscaled`;
+4. отдельно спрашивает `Tailscale auth key`;
+5. отдельно спрашивает имя роутера;
+6. выполняет `tailscale up`;
+7. показывает Tailscale IPv4;
+8. не открывает SSH/LuCI в WAN.
 
+После настройки можно заходить на роутер удалённо:
 
-\* проверяет, что это OpenWrt;
-
-\* проверяет наличие `/etc/config/podkop`;
-
-\* делает backup текущего Podkop-конфига;
-
-\* обновляет списки пакетов;
-
-\* ставит базовые утилиты;
-
-\* запускает официальный installer/update Podkop;
-
-\* устанавливает Remnawave updater;
-
-\* сохраняет subscription URL в `/etc/podkop-remnawave/subscription.conf`;
-
-\* добавляет cron каждые 4 часа;
-
-\* делает первый запуск обновления;
-
-\* перезапускает Podkop/sing-box;
-
-\* показывает проверку состояния.
-
-
-
-\---
-
-
-
-\## Логика обновления ключей
-
-
-
-Remnawave updater:
-
-
-
-\* скачивает актуальную Remnawave-подписку;
-
-\* извлекает VLESS-ссылки;
-
-\* добавляет `spx=%2F` для Reality-ссылок, если его нет;
-
-\* помечает свои ссылки суффиксом `-rwsub`;
-
-\* при следующем обновлении удаляет только старые `-rwsub` ссылки;
-
-\* ручные ключи без `-rwsub` не трогает;
-
-\* если секция `USA` уже существует, US-ссылки идут в `USA`;
-
-\* если секции `USA` нет, все Remnawave-ссылки идут в `main`.
-
-
-
-\---
-
-
-
-\## Проверка после установки
-
-
-
-```sh
-
-cat /tmp/podkop-sub-update.log
-
-
-
-pgrep -af sing-box
-
-
-
-netstat -lntup 2>/dev/null | grep -E '1602|9090|sing|podkop' || true
-
-
-
-uci show podkop.main | grep 'urltest\_proxy\_links'
-
-
-
-uci show podkop.USA 2>/dev/null | grep 'urltest\_proxy\_links' || true
-
-
-
-cat /etc/crontabs/root | grep update-podkop
-
+```text
+ssh root@TAILSCALE_IP
+http://TAILSCALE_IP/
+http://TAILSCALE_IP:9090/
 ```
 
+Где:
 
+```text
+22    — SSH
+80    — LuCI
+9090  — YACD / sing-box API, если включён в Podkop
+```
+
+---
+
+## Важные настройки Tailscale auth key
+
+В Tailscale Admin Console создать auth key:
+
+```text
+Settings → Keys → Generate auth key
+```
+
+Рекомендуемые параметры:
+
+```text
+Description: OpenWrt routers
+Reusable: ON
+Expiration: 90 days
+Ephemeral: OFF
+Tags: OFF
+```
+
+После генерации Tailscale покажет ключ вида:
+
+```text
+tskey-auth-xxxxxxxxxxxxxxxx
+```
+
+Важно:
+
+- не добавлять `tskey-auth-...` в GitHub;
+- не отправлять ключ в публичные чаты;
+- после настройки всех роутеров можно удалить или отключить auth key в Tailscale Admin Console.
+
+---
+
+## Установка на роутере
+
+Подключиться к роутеру по SSH под `root`.
+
+Скачать скрипт:
+
+```sh
+wget -O /tmp/remote.sh \
+  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/install-remote-access-tailscale.sh
+```
+
+Сделать исполняемым:
+
+```sh
+chmod +x /tmp/remote.sh
+```
+
+Запустить:
+
+```sh
+sh /tmp/remote.sh
+```
+
+Скрипт спросит:
+
+```text
+Tailscale auth key:
+Tailscale router name:
+```
+
+В поле `Tailscale auth key` вставить ключ вида:
+
+```text
+tskey-auth-xxxxxxxxxxxxxxxx
+```
+
+В поле `Tailscale router name` ввести понятное имя роутера, например:
+
+```text
+nanopi-r3s-home
+xiaomi-ax300t-flat
+openwrt-office
+```
+
+Имя будет автоматически приведено к безопасному виду:
+
+```text
+только a-z, 0-9 и дефисы
+```
+
+---
+
+## Запуск без вопросов через переменные
+
+Можно передать auth key и имя роутера сразу:
+
+```sh
+TAILSCALE_AUTHKEY='tskey-auth-XXXX' \
+TAILSCALE_HOSTNAME='nanopi-r3s-home' \
+sh /tmp/remote.sh
+```
+
+Полный вариант одной командой:
+
+```sh
+TAILSCALE_AUTHKEY='tskey-auth-XXXX' \
+TAILSCALE_HOSTNAME='nanopi-r3s-home' \
+sh -c '
+wget -O /tmp/remote.sh https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/install-remote-access-tailscale.sh &&
+chmod +x /tmp/remote.sh &&
+TAILSCALE_AUTHKEY="$TAILSCALE_AUTHKEY" TAILSCALE_HOSTNAME="$TAILSCALE_HOSTNAME" sh /tmp/remote.sh
+'
+```
+
+---
+
+## Вариант без auth key
+
+Можно оставить поле auth key пустым.
+
+Тогда скрипт выполнит:
+
+```sh
+tailscale up --hostname=ИМЯ_РОУТЕРА --accept-dns=false
+```
+
+И Tailscale покажет ссылку авторизации.
+
+Открыть ссылку в браузере, войти в Tailscale и подтвердить подключение роутера.
+
+---
+
+## Проверка после установки
+
+На роутере:
+
+```sh
+tailscale status
+tailscale ip -4
+pgrep -af tailscaled
+```
 
 Ожидаемо:
 
-
-
 ```text
-
-sing-box running
-
-cron update-podkop-from-remnawave.sh есть
-
-main содержит Remnawave-ссылки с -rwsub
-
-ручные ссылки без -rwsub сохранены
-
+tailscaled запущен
+tailscale ip -4 показывает адрес вида 100.x.y.z
 ```
 
+---
 
+## Как подключаться к роутеру после настройки
 
-\---
-
-
-
-\## Где хранится subscription URL
-
-
+С ноутбука или другого устройства, которое тоже подключено к тому же Tailscale-аккаунту:
 
 ```sh
-
-/etc/podkop-remnawave/subscription.conf
-
+ssh root@TAILSCALE_IP
 ```
 
+LuCI:
 
+```text
+http://TAILSCALE_IP/
+```
+
+YACD / sing-box API, если включён Podkop:
+
+```text
+http://TAILSCALE_IP:9090/
+```
+
+Пример:
+
+```sh
+ssh root@100.75.185.50
+```
+
+```text
+http://100.75.185.50/
+```
+
+---
+
+## Дополнительные параметры Tailscale
+
+Можно передать дополнительные параметры через `TAILSCALE_EXTRA_ARGS`.
+
+Например, чтобы роутер рекламировал подсеть LAN:
+
+```sh
+TAILSCALE_EXTRA_ARGS='--advertise-routes=192.168.31.0/24' sh /tmp/remote.sh
+```
+
+Это нужно только если требуется доступ не только к самому роутеру, но и к устройствам за ним.
+
+Обычный удалённый доступ к самому роутеру этого не требует.
+
+---
+
+## Безопасность
+
+Не открывать SSH/LuCI в WAN.
+
+Не делать port forwarding на роутер.
+
+Использовать доступ только через Tailscale IP.
+
+Обязательно задать пароль root:
+
+```sh
+passwd
+```
+
+Проверить, что SSH доступен через Tailscale:
+
+```sh
+ssh root@TAILSCALE_IP
+```
+
+---
+
+## Удаление Tailscale
+
+Остановить:
+
+```sh
+/etc/init.d/tailscale stop
+/etc/init.d/tailscale disable
+```
+
+Удалить пакет:
+
+```sh
+opkg remove tailscale
+```
 
 Проверить:
 
-
-
 ```sh
-
-cat /etc/podkop-remnawave/subscription.conf
-
+pgrep -af tailscaled || echo "tailscaled stopped"
 ```
 
+---
 
-
-Права:
-
-
+## Быстрая команда-шпаргалка
 
 ```sh
+wget -O /tmp/remote.sh \
+  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/install-remote-access-tailscale.sh
 
-chmod 600 /etc/podkop-remnawave/subscription.conf
+chmod +x /tmp/remote.sh
 
+sh /tmp/remote.sh
 ```
 
+---
 
-
-\---
-
-
-
-\## Ручной запуск обновления
-
-
+## Быстрая команда с auth key и именем роутера
 
 ```sh
-
-/usr/bin/update-podkop-from-remnawave.sh
-
+TAILSCALE_AUTHKEY='tskey-auth-XXXX' \
+TAILSCALE_HOSTNAME='nanopi-r3s-home' \
+sh -c '
+wget -O /tmp/remote.sh https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/install-remote-access-tailscale.sh &&
+chmod +x /tmp/remote.sh &&
+TAILSCALE_AUTHKEY="$TAILSCALE_AUTHKEY" TAILSCALE_HOSTNAME="$TAILSCALE_HOSTNAME" sh /tmp/remote.sh
+'
 ```
-
-
-
-Лог:
-
-
-
-```sh
-
-cat /tmp/podkop-sub-update.log
-
-```
-
-
-
-\---
-
-
-
-\## Backup
-
-
-
-Backup-и находятся здесь:
-
-
-
-```sh
-
-/etc/podkop-remnawave/backups/
-
-```
-
-
-
-Также updater создаёт backup Podkop-конфига:
-
-
-
-```sh
-
-/etc/config/podkop.backup.\*
-
-```
-
-
-
-\---
-
-
-
-\## Если что-то пошло не так
-
-
-
-Проверить Podkop/sing-box:
-
-
-
-```sh
-
-pgrep -af sing-box
-
-
-
-sing-box check -c /etc/sing-box/config.json
-
-
-
-logread | grep -iE 'podkop|sing-box|singbox|error|failed|fatal|panic|invalid' | tail -n 160
-
-```
-
-
-
-Перезапустить:
-
-
-
-```sh
-
-/etc/init.d/podkop restart
-
-sleep 10
-
-pgrep -af sing-box
-
-```
-
-
-
-\---
-
-
-
-\## Важно по безопасности
-
-
-
-Не добавлять реальные subscription URL, token, UUID, VLESS-ссылки и приватные ключи в GitHub.
-
-
-
-В GitHub должны быть только:
-
-
-
-\* скрипты;
-
-\* инструкции;
-
-\* примеры без секретов.
-
-
-
-Реальные данные хранятся только на роутере.
-
-
-
