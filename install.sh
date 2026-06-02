@@ -2,6 +2,7 @@
 set -eu
 
 REPO_UPDATER_URL="https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/update-podkop-from-remnawave.sh"
+PODKOP_INSTALL_URL="https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh"
 
 APP_DIR="/etc/podkop-remnawave"
 CONF="$APP_DIR/subscription.conf"
@@ -21,6 +22,7 @@ if [ ! -f /etc/openwrt_release ]; then
   exit 1
 fi
 
+echo
 echo "[INFO] OpenWrt release:"
 cat /etc/openwrt_release || true
 
@@ -73,6 +75,36 @@ fetch() {
   fi
 }
 
+read_from_tty() {
+  prompt="$1"
+  var_name="$2"
+
+  if [ -r /dev/tty ]; then
+    printf "%s" "$prompt" > /dev/tty
+    IFS= read -r value < /dev/tty
+  else
+    printf "%s" "$prompt"
+    IFS= read -r value
+  fi
+
+  eval "$var_name=\$value"
+}
+
+run_podkop_installer_non_interactive() {
+  echo "[INFO] Running Podkop installer in non-interactive mode..."
+  echo "[INFO] Auto-answering Podkop prompts with: y"
+
+  # The official Podkop installer may ask "Введите y или n" for Russian language.
+  # When our script is started as "wget -O - ... | sh", stdin is not interactive,
+  # so the Podkop installer can loop forever. This pipe feeds "y" repeatedly.
+  (
+    while true; do
+      printf 'y\n'
+      sleep 1
+    done
+  ) | sh /tmp/podkop-install.sh
+}
+
 echo
 echo "[STEP] Updating package lists..."
 pkg_update
@@ -104,13 +136,16 @@ echo
 echo "[STEP] Installing Podkop..."
 
 if [ ! -f /etc/init.d/podkop ]; then
-  fetch "https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh" /tmp/podkop-install.sh
+  fetch "$PODKOP_INSTALL_URL" /tmp/podkop-install.sh
   chmod +x /tmp/podkop-install.sh
-  sh /tmp/podkop-install.sh || {
+
+  if run_podkop_installer_non_interactive; then
+    echo "[OK] Podkop installer finished."
+  else
     echo "[ERROR] Podkop install failed."
     echo "[INFO] Check logs above. You may need to install Podkop manually, then rerun this installer."
     exit 1
-  }
+  fi
 else
   echo "[INFO] Podkop already installed."
 fi
@@ -126,8 +161,7 @@ echo "[STEP] Remnawave subscription URL"
 if [ -n "${SUB_URL:-}" ]; then
   REMNA_SUB_URL="$SUB_URL"
 else
-  printf "Paste Remnawave subscription URL: "
-  read -r REMNA_SUB_URL
+  read_from_tty "Paste Remnawave subscription URL: " REMNA_SUB_URL
 fi
 
 if [ -z "$REMNA_SUB_URL" ]; then
@@ -243,3 +277,4 @@ echo "[OK] Installation complete."
 echo "[INFO] Config: $CONF"
 echo "[INFO] Updater: $UPDATER"
 echo "[INFO] Log: $LOG"
+echo "[INFO] Backups: $APP_DIR/backups"
