@@ -21,19 +21,28 @@ INSTALL_PODKOP="${INSTALL_PODKOP:-auto}"
 ENABLE_LUCI_TAILSCALE="${ENABLE_LUCI_TAILSCALE:-1}"
 DRY_RUN="${DRY_RUN:-0}"
 INTERACTIVE="${INTERACTIVE:-1}"
+REBOOT_AFTER="${REBOOT_AFTER:-1}"
+REBOOT_DELAY="${REBOOT_DELAY:-15}"
+LOG_FILE="${LOG_FILE:-/root/podkop-bootstrap.log}"
+ROUTER_NAME="${ROUTER_NAME:-}"
+TAILSCALE_HOSTNAME="${TAILSCALE_HOSTNAME:-}"
+SET_OPENWRT_HOSTNAME="${SET_OPENWRT_HOSTNAME:-1}"
 
 BACKUP_DIR=""
 ROUTER_STATE=""
 OPENWRT_VERSION="unknown"
 OPENWRT_TARGET="unknown"
 OPENWRT_ARCH="unknown"
+ROUTER_NAME_INPUT=""
 ROUTER_NAME_SAFE=""
+TAILSCALE_HOSTNAME_SAFE=""
 TAILSCALE_IP=""
 SUB_IMPORT_COUNT="skipped"
 PODKOP_STOPPED_WARN=0
 SINGBOX_KILLED_WARN=0
 TAILSCALE_AUTH_MODE="existing-or-browser"
 SUBSCRIPTION_SOURCE="skipped"
+BOOTSTRAP_COMPLETED=0
 
 echo "=== OpenWrt Podkop + Remnawave + Tailscale bootstrap ==="
 
@@ -41,21 +50,29 @@ is_dry_run() {
   [ "$DRY_RUN" = "1" ]
 }
 
+log_line() {
+  printf '%s\n' "$*"
+
+  if [ -n "${LOG_FILE:-}" ]; then
+    printf '%s\n' "$*" >> "$LOG_FILE" 2>/dev/null || true
+  fi
+}
+
 info() {
-  echo "[INFO] $*"
+  log_line "[INFO] $*"
 }
 
 step() {
-  echo
-  echo "[STEP] $*"
+  log_line ""
+  log_line "[STEP] $*"
 }
 
 warn() {
-  echo "[WARN] $*"
+  log_line "[WARN] $*"
 }
 
 err() {
-  echo "[ERROR] $*"
+  log_line "[ERROR] $*"
 }
 
 run_cmd() {
@@ -138,6 +155,15 @@ validate_env() {
   validate_flag ENABLE_LUCI_TAILSCALE "$ENABLE_LUCI_TAILSCALE"
   validate_flag DRY_RUN "$DRY_RUN"
   validate_flag INTERACTIVE "$INTERACTIVE"
+  validate_flag REBOOT_AFTER "$REBOOT_AFTER"
+  validate_flag SET_OPENWRT_HOSTNAME "$SET_OPENWRT_HOSTNAME"
+
+  case "$REBOOT_DELAY" in
+    ''|*[!0-9]*)
+      err "REBOOT_DELAY must be a non-negative integer."
+      exit 1
+      ;;
+  esac
 
   case "$INSTALL_PODKOP" in
     auto|0|1) ;;
@@ -155,6 +181,140 @@ validate_env() {
         exit 1
         ;;
     esac
+  fi
+}
+
+current_openwrt_hostname() {
+  uci -q get system.@system[0].hostname 2>/dev/null || hostname 2>/dev/null || echo openwrt-router
+}
+
+print_router_name_prompt() {
+  log_line "============================================================"
+  log_line "[INPUT REQUIRED] Router/device name"
+  log_line "[ТРЕБУЕТСЯ ВВОД] Имя роутера / устройства"
+  log_line "------------------------------------------------------------"
+  log_line "Example / пример:"
+  log_line "  nanopi-r3s-home"
+  log_line "  xiaomi-ax300t-flat"
+  log_line "  openwrt-office-1"
+  log_line ""
+  log_line "This name will be used as Tailscale hostname."
+  log_line "Это имя будет использовано как имя устройства в Tailscale."
+  log_line "============================================================"
+}
+
+print_tailscale_key_prompt() {
+  log_line "============================================================"
+  log_line "[INPUT REQUIRED] Tailscale auth key"
+  log_line "[ТРЕБУЕТСЯ ВВОД] Ключ авторизации Tailscale"
+  log_line "------------------------------------------------------------"
+  log_line "Example / пример:"
+  log_line "  tskey-auth-xxxxxxxxxxxxxxxx"
+  log_line ""
+  log_line "Leave empty to use browser login if auth key is not available."
+  log_line "Оставьте пустым, чтобы использовать вход через браузер, если ключа нет."
+  log_line ""
+  log_line "The key will not be printed in logs."
+  log_line "Ключ не будет выводиться в логах."
+  log_line "============================================================"
+}
+
+print_sub_url_prompt() {
+  log_line "============================================================"
+  log_line "[INPUT REQUIRED] Remnawave subscription URL"
+  log_line "[ТРЕБУЕТСЯ ВВОД] Ссылка на подписку Remnawave"
+  log_line "------------------------------------------------------------"
+  log_line "Example / пример:"
+  log_line "  https://sub.example.com/token"
+  log_line ""
+  log_line "Leave empty to keep existing subscription if already configured."
+  log_line "Оставьте пустым, чтобы оставить старую подписку, если она уже настроена."
+  log_line "============================================================"
+}
+
+set_router_names() {
+  input="$1"
+
+  ROUTER_NAME_INPUT="$input"
+  ROUTER_NAME_SAFE="$(sanitize_hostname "$input")"
+  [ -n "$ROUTER_NAME_SAFE" ] || ROUTER_NAME_SAFE="openwrt-router"
+
+  if [ -n "$TAILSCALE_HOSTNAME" ]; then
+    TAILSCALE_HOSTNAME_SAFE="$(sanitize_hostname "$TAILSCALE_HOSTNAME")"
+    [ -n "$TAILSCALE_HOSTNAME_SAFE" ] || TAILSCALE_HOSTNAME_SAFE="$ROUTER_NAME_SAFE"
+  else
+    TAILSCALE_HOSTNAME_SAFE="$ROUTER_NAME_SAFE"
+  fi
+
+  info "Router name input: $ROUTER_NAME_INPUT"
+  info "Router name normalized: $ROUTER_NAME_SAFE"
+  info "Tailscale hostname: $TAILSCALE_HOSTNAME_SAFE"
+}
+
+configure_openwrt_hostname() {
+  if [ "$SET_OPENWRT_HOSTNAME" != "1" ]; then
+    info "SET_OPENWRT_HOSTNAME=0. OpenWrt system hostname will not be changed."
+    return 0
+  fi
+
+  if ! command -v uci >/dev/null 2>&1; then
+    warn "uci command not found. Cannot set OpenWrt hostname."
+    return 0
+  fi
+
+  info "Setting OpenWrt hostname to: $ROUTER_NAME_SAFE"
+  run_cmd uci set system.@system[0].hostname="$ROUTER_NAME_SAFE" || {
+    warn "Failed to set OpenWrt hostname."
+    return 0
+  }
+  run_cmd uci commit system || warn "Failed to commit OpenWrt hostname."
+
+  if [ -x /etc/init.d/system ]; then
+    run_cmd /etc/init.d/system reload 2>/dev/null || warn "Failed to reload system service after hostname change."
+  fi
+}
+
+init_logging() {
+  if [ -z "${LOG_FILE:-}" ]; then
+    return 0
+  fi
+
+  if : > "$LOG_FILE" 2>/dev/null; then
+    chmod 600 "$LOG_FILE" 2>/dev/null || true
+    info "Bootstrap log file: $LOG_FILE"
+  else
+    echo "[WARN] Cannot write bootstrap log file: $LOG_FILE"
+    LOG_FILE=""
+  fi
+}
+
+bootstrap_failed() {
+  rc="$1"
+
+  if [ "$BOOTSTRAP_COMPLETED" = "1" ]; then
+    return 0
+  fi
+
+  echo
+  echo "[ERROR] Bootstrap failed."
+  echo "Exit code: $rc"
+  echo "Backup dir: ${BACKUP_DIR:-not-created}"
+  echo "Log file: ${LOG_FILE:-not-created}"
+
+  if [ -n "${LOG_FILE:-}" ] && [ -f "$LOG_FILE" ]; then
+    echo
+    echo "[INFO] Last error log lines:"
+    tail -n 80 "$LOG_FILE" 2>/dev/null || true
+  fi
+
+  echo "[INFO] Automatic reboot is not performed after failure."
+}
+
+on_exit() {
+  rc="$1"
+
+  if [ "$rc" -ne 0 ]; then
+    bootstrap_failed "$rc"
   fi
 }
 
@@ -197,8 +357,17 @@ load_existing_sub_url() {
 prompt_startup_inputs() {
   if [ "$INTERACTIVE" != "1" ]; then
     info "INTERACTIVE=0. Using environment variables only."
+
+    if [ -n "$ROUTER_NAME" ]; then
+      info "Router/device name provided by environment."
+      set_router_names "$ROUTER_NAME"
+    else
+      set_router_names "$(current_openwrt_hostname)"
+    fi
+
     if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
       TAILSCALE_AUTH_MODE="env-key"
+      info "Tailscale auth key provided by environment. The key will not be printed."
     else
       TAILSCALE_AUTH_MODE="existing-or-browser"
     fi
@@ -217,13 +386,24 @@ prompt_startup_inputs() {
     return 0
   fi
 
+  if [ -n "$ROUTER_NAME" ]; then
+    info "Router/device name provided by environment."
+    set_router_names "$ROUTER_NAME"
+  else
+    print_router_name_prompt
+    printf '%s' "Enter Router/device name / Введите имя роутера: "
+    IFS= read ROUTER_NAME_INPUT || ROUTER_NAME_INPUT=""
+    if [ -z "$ROUTER_NAME_INPUT" ]; then
+      ROUTER_NAME_INPUT="$(current_openwrt_hostname)"
+    fi
+    set_router_names "$ROUTER_NAME_INPUT"
+  fi
+
   if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
     TAILSCALE_AUTH_MODE="env-key"
-    info "TAILSCALE_AUTHKEY is already provided via environment."
+    info "Tailscale auth key provided by environment. The key will not be printed."
   else
-    echo "Tailscale auth key / ключ удалённого доступа Tailscale"
-    echo "Press Enter to keep existing authorization or use browser login if needed."
-    echo "Нажмите Enter, чтобы оставить текущую авторизацию или использовать вход через браузер при необходимости."
+    print_tailscale_key_prompt
     printf '%s' "Enter Tailscale auth key / Введите Tailscale auth key: "
     IFS= read TAILSCALE_AUTHKEY || TAILSCALE_AUTHKEY=""
     if [ -n "$TAILSCALE_AUTHKEY" ]; then
@@ -235,12 +415,10 @@ prompt_startup_inputs() {
 
   if [ -n "${SUB_URL:-}" ]; then
     SUBSCRIPTION_SOURCE="env"
-    info "SUB_URL is already provided via environment: $(mask_url "$SUB_URL")"
+    info "Remnawave subscription URL provided by environment: $(mask_url "$SUB_URL")"
   else
-    echo "Remnawave subscription URL / ссылка на подписку Remnawave"
-    echo "Press Enter to keep existing subscription or skip if none."
-    echo "Нажмите Enter, чтобы оставить старую подписку или пропустить, если её ещё нет."
-    printf '%s' "Enter subscription URL / Введите ссылку на подписку: "
+    print_sub_url_prompt
+    printf '%s' "Enter Remnawave subscription URL / Введите ссылку на подписку Remnawave: "
     IFS= read SUB_URL || SUB_URL=""
     if [ -n "$SUB_URL" ]; then
       SUBSCRIPTION_SOURCE="entered"
@@ -403,17 +581,6 @@ preflight() {
   [ -n "$OPENWRT_TARGET" ] || OPENWRT_TARGET="unknown"
   [ -n "$OPENWRT_ARCH" ] || OPENWRT_ARCH="unknown"
 
-  if [ -n "${ROUTER_NAME:-}" ]; then
-    router_name_input="$ROUTER_NAME"
-    ROUTER_NAME_SAFE="$(sanitize_hostname "$ROUTER_NAME")"
-  else
-    current_name="$(uci -q get system.@system[0].hostname 2>/dev/null || hostname 2>/dev/null || echo openwrt)"
-    router_name_input="$current_name"
-    ROUTER_NAME_SAFE="$(sanitize_hostname "$current_name")"
-  fi
-
-  [ -n "$ROUTER_NAME_SAFE" ] || ROUTER_NAME_SAFE="openwrt-router"
-
   if ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1; then
     internet_state="ok"
   else
@@ -462,8 +629,9 @@ preflight() {
   echo "OpenWrt version: $OPENWRT_VERSION"
   echo "Target: $OPENWRT_TARGET"
   echo "Arch: $OPENWRT_ARCH"
-  echo "Router name input: $router_name_input"
+  echo "Router name input: $ROUTER_NAME_INPUT"
   echo "Router name: $ROUTER_NAME_SAFE"
+  echo "Tailscale hostname: $TAILSCALE_HOSTNAME_SAFE"
   echo "Package manager: $PKG"
   echo "opkg: $(command_state opkg)"
   echo "Internet ping 1.1.1.1: $internet_state"
@@ -548,13 +716,6 @@ install_dependencies() {
   pkg_install_one iptables-nft 0
   pkg_install_one ip6tables-nft 0
 
-  if [ "$INSTALL_TTYD" = "1" ]; then
-    pkg_install_one ttyd 0
-    pkg_install_one luci-app-ttyd 0
-  else
-    info "INSTALL_TTYD=0. Skipping ttyd packages."
-  fi
-
   if [ "$INSTALL_RU_LOCALE" = "1" ]; then
     pkg_install_one luci-i18n-base-ru 0
     pkg_install_one luci-i18n-firewall-ru 0
@@ -563,9 +724,23 @@ install_dependencies() {
     info "INSTALL_RU_LOCALE=0. Skipping Russian LuCI locale packages."
   fi
 
-  if [ -x /etc/init.d/ttyd ] && [ "$INSTALL_TTYD" = "1" ]; then
-    run_cmd /etc/init.d/ttyd enable || true
-    run_cmd /etc/init.d/ttyd restart || true
+}
+
+install_ttyd_optional() {
+  step "Optional ttyd installation"
+
+  if [ "$INSTALL_TTYD" != "1" ]; then
+    info "Skipping ttyd installation/update because INSTALL_TTYD=0."
+    return 0
+  fi
+
+  warn "Installing/updating ttyd may interrupt a current LuCI Terminal / ttyd session."
+  pkg_install_one ttyd 0 || warn "ttyd install failed or was interrupted."
+  pkg_install_one luci-app-ttyd 0 || warn "luci-app-ttyd install failed or was interrupted."
+
+  if [ -x /etc/init.d/ttyd ]; then
+    run_cmd /etc/init.d/ttyd enable || warn "Failed to enable ttyd autostart."
+    run_cmd /etc/init.d/ttyd restart || warn "Failed to restart ttyd."
   fi
 }
 
@@ -660,7 +835,7 @@ wait_tailscale_online() {
   while [ "$i" -lt 60 ]; do
     TAILSCALE_IP="$(tailscale ip -4 2>/dev/null | head -n 1 || true)"
     ts_status="$(tailscale status 2>/dev/null || true)"
-    self_line="$(printf '%s\n' "$ts_status" | grep -i "[[:space:]]${ROUTER_NAME_SAFE}[[:space:]]" | head -n 1 || true)"
+    self_line="$(printf '%s\n' "$ts_status" | grep -i "[[:space:]]${TAILSCALE_HOSTNAME_SAFE}[[:space:]]" | head -n 1 || true)"
 
     if [ -n "$TAILSCALE_IP" ]; then
       if [ -z "$self_line" ] || ! printf '%s\n' "$self_line" | grep -qi 'offline'; then
@@ -685,23 +860,23 @@ run_tailscale_up() {
 
   if is_dry_run; then
     if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
-      echo "[DRY_RUN] tailscale up --auth-key=***MASKED*** --accept-dns=false --ssh=false --hostname=$ROUTER_NAME_SAFE"
+      echo "[DRY_RUN] tailscale up --auth-key=***MASKED*** --accept-dns=false --ssh=false --hostname=$TAILSCALE_HOSTNAME_SAFE"
     else
-      echo "[DRY_RUN] tailscale up --accept-dns=false --ssh=false --hostname=$ROUTER_NAME_SAFE"
+      echo "[DRY_RUN] tailscale up --accept-dns=false --ssh=false --hostname=$TAILSCALE_HOSTNAME_SAFE"
     fi
     return 0
   fi
 
   if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
     info "Using provided Tailscale auth key. The key will not be printed."
-    if tailscale up --auth-key="$TAILSCALE_AUTHKEY" --accept-dns=false --ssh=false --hostname="$ROUTER_NAME_SAFE" >"$tmp" 2>&1; then
+    if tailscale up --auth-key="$TAILSCALE_AUTHKEY" --accept-dns=false --ssh=false --hostname="$TAILSCALE_HOSTNAME_SAFE" >"$tmp" 2>&1; then
       sed 's/tskey-[^[:space:]]*/tskey-***MASKED***/g' "$tmp"
       rm -f "$tmp"
       return 0
     fi
   else
     info "No Tailscale auth key provided. Existing state or browser login flow will be used."
-    if tailscale up --accept-dns=false --ssh=false --hostname="$ROUTER_NAME_SAFE" >"$tmp" 2>&1; then
+    if tailscale up --accept-dns=false --ssh=false --hostname="$TAILSCALE_HOSTNAME_SAFE" >"$tmp" 2>&1; then
       sed 's/tskey-[^[:space:]]*/tskey-***MASKED***/g' "$tmp"
       rm -f "$tmp"
       return 0
@@ -906,7 +1081,7 @@ run_subscription_update() {
 }
 
 final_report() {
-  step "Final report"
+  step "Final status"
 
   if command -v tailscale >/dev/null 2>&1; then
     TAILSCALE_IP="$(tailscale ip -4 2>/dev/null | head -n 1 || true)"
@@ -933,17 +1108,24 @@ final_report() {
     singbox_final="missing"
   fi
 
-  echo "OpenWrt version: $OPENWRT_VERSION"
-  echo "Router name: $ROUTER_NAME_SAFE"
-  echo "Tailscale IP: $TAILSCALE_IP"
-  echo "SSH command: ssh root@$TAILSCALE_IP"
-  echo "LuCI URL: http://$TAILSCALE_IP/"
-  echo "Podkop status: $podkop_final"
-  echo "sing-box status: $singbox_final"
-  echo "Tailscale auth: $TAILSCALE_AUTH_MODE"
-  echo "Subscription source: $SUBSCRIPTION_SOURCE"
-  echo "Subscription import count: $SUB_IMPORT_COUNT"
-  echo "Backup dir: ${BACKUP_DIR:-not-created}"
+  log_line "[SUCCESS] Bootstrap completed successfully."
+  log_line ""
+  log_line "Router name input: $ROUTER_NAME_INPUT"
+  log_line "Router name: $ROUTER_NAME_SAFE"
+  log_line "Tailscale hostname: $TAILSCALE_HOSTNAME_SAFE"
+  log_line "Tailscale IP: $TAILSCALE_IP"
+  log_line "SSH command: ssh root@$TAILSCALE_IP"
+  log_line "LuCI URL: http://$TAILSCALE_IP/"
+  log_line "Podkop status: $podkop_final"
+  log_line "Subscription import count: $SUB_IMPORT_COUNT"
+  log_line "Backup dir: ${BACKUP_DIR:-not-created}"
+  log_line "Log file: ${LOG_FILE:-not-created}"
+  log_line "INSTALL_TTYD: $INSTALL_TTYD"
+  log_line "REBOOT_AFTER: $REBOOT_AFTER"
+  log_line "REBOOT_DELAY: $REBOOT_DELAY"
+  log_line "sing-box status: $singbox_final"
+  log_line "Tailscale auth: $TAILSCALE_AUTH_MODE"
+  log_line "Subscription source: $SUBSCRIPTION_SOURCE"
 
   if [ "$PODKOP_STOPPED_WARN" = "1" ]; then
     warn "Podkop was stopped during safe Tailscale/Podkop handling."
@@ -953,16 +1135,36 @@ final_report() {
     warn "A stale sing-box process was killed."
   fi
 
-  echo "[SECURITY] WAN ports were not opened."
+  log_line "[SECURITY] WAN ports were not opened."
 }
 
+reboot_requirement() {
+  step "Reboot requirement"
+
+  log_line "[REBOOT REQUIRED] Reboot is required after bootstrap."
+
+  if [ "$REBOOT_AFTER" = "1" ]; then
+    log_line "[INFO] Router will reboot automatically in ${REBOOT_DELAY} seconds."
+    run_cmd sync || warn "sync failed before reboot."
+    sleep "$REBOOT_DELAY"
+    BOOTSTRAP_COMPLETED=1
+    run_cmd reboot || warn "reboot command failed. Run manually: sync && reboot"
+  else
+    log_line "[INFO] Run manually if automatic reboot is disabled:"
+    log_line "sync && reboot"
+  fi
+}
+
+trap 'on_exit $?' EXIT
 validate_env
 require_root_openwrt
+init_logging
 pkg_detect
 prompt_startup_inputs
 validate_env
 preflight
 make_backup
+configure_openwrt_hostname
 install_dependencies
 setup_tailscale
 setup_podkop
@@ -970,4 +1172,7 @@ if write_subscription_config; then
   install_updater_and_cron
   run_subscription_update
 fi
+install_ttyd_optional
 final_report
+reboot_requirement
+BOOTSTRAP_COMPLETED=1

@@ -75,19 +75,54 @@ ROUTER_NAME='my-router' \
 /tmp/bootstrap.sh
 ```
 
-The script asks exactly two startup questions:
+The script asks three startup questions when values are not provided through environment variables:
 
 ```text
+============================================================
+[INPUT REQUIRED] Router/device name
+[ТРЕБУЕТСЯ ВВОД] Имя роутера / устройства
+------------------------------------------------------------
+Example / пример:
+  nanopi-r3s-home
+  xiaomi-ax300t-flat
+  openwrt-office-1
+
+This name will be used as Tailscale hostname.
+Это имя будет использовано как имя устройства в Tailscale.
+============================================================
+Enter Router/device name / Введите имя роутера:
+
 Tailscale auth key / ключ удалённого доступа Tailscale
-Press Enter to keep existing authorization or use browser login if needed.
-Нажмите Enter, чтобы оставить текущую авторизацию или использовать вход через браузер при необходимости.
+============================================================
+[INPUT REQUIRED] Tailscale auth key
+[ТРЕБУЕТСЯ ВВОД] Ключ авторизации Tailscale
+------------------------------------------------------------
+Example / пример:
+  tskey-auth-xxxxxxxxxxxxxxxx
+
+Leave empty to use browser login if auth key is not available.
+Оставьте пустым, чтобы использовать вход через браузер, если ключа нет.
+
+The key will not be printed in logs.
+Ключ не будет выводиться в логах.
+============================================================
 Enter Tailscale auth key / Введите Tailscale auth key:
 
+============================================================
 Remnawave subscription URL / ссылка на подписку Remnawave
-Press Enter to keep existing subscription or skip if none.
-Нажмите Enter, чтобы оставить старую подписку или пропустить, если её ещё нет.
-Enter subscription URL / Введите ссылку на подписку:
+[INPUT REQUIRED] Remnawave subscription URL
+[ТРЕБУЕТСЯ ВВОД] Ссылка на подписку Remnawave
+------------------------------------------------------------
+Example / пример:
+  https://sub.example.com/token
+
+Leave empty to keep existing subscription if already configured.
+Оставьте пустым, чтобы оставить старую подписку, если она уже настроена.
+============================================================
+Enter Remnawave subscription URL / Введите ссылку на подписку Remnawave:
 ```
+
+Router/device name is normalized to lowercase Tailscale-safe form, for example `NanoPi R3S Home` becomes `nanopi-r3s-home`. `TAILSCALE_HOSTNAME` can override only the Tailscale hostname. Use `SET_OPENWRT_HOSTNAME=0` if you do not want bootstrap to change the OpenWrt system hostname.
 
 Leave the Tailscale auth key empty to keep the current Tailscale authorization if it already exists; otherwise Tailscale will use browser login. Leave the subscription URL empty to reuse the saved `/etc/podkop-remnawave/subscription.conf` URL if present; otherwise subscription import is skipped.
 
@@ -98,6 +133,16 @@ INTERACTIVE=0 \
 TAILSCALE_AUTHKEY='TS_AUTH_KEY_PLACEHOLDER' \
 ROUTER_NAME='openwrt-router' \
 SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
+  /tmp/bootstrap-openwrt-router.sh
+```
+
+To avoid changing the OpenWrt system hostname:
+
+```sh
+INTERACTIVE=0 \
+TAILSCALE_AUTHKEY='TS_AUTH_KEY_PLACEHOLDER' \
+ROUTER_NAME='openwrt-router' \
+SET_OPENWRT_HOSTNAME=0 \
   /tmp/bootstrap-openwrt-router.sh
 ```
 
@@ -123,6 +168,49 @@ DRY_RUN=1                 # print intended actions
 ```
 
 If `SUB_URL` is omitted and no saved subscription exists, bootstrap still configures the router and Tailscale, then skips subscription import with a warning.
+
+### Final Status, Logs, And Reboot
+
+At the end of a successful bootstrap run, the script prints:
+
+```text
+[SUCCESS] Bootstrap completed successfully.
+Router name:
+Tailscale IP:
+SSH command:
+LuCI URL:
+Podkop status:
+Subscription import count:
+Backup dir:
+```
+
+Bootstrap writes important status messages to:
+
+```text
+/root/podkop-bootstrap.log
+```
+
+A reboot is required after a full bootstrap. By default, `REBOOT_AFTER=1`, so the router reboots automatically after `REBOOT_DELAY` seconds. To disable automatic reboot:
+
+```sh
+REBOOT_AFTER=0 ROUTER_NAME='my-router' /tmp/bootstrap.sh
+```
+
+Then reboot manually:
+
+```sh
+sync && reboot
+```
+
+If bootstrap fails, automatic reboot is not performed. The script prints `[ERROR] Bootstrap failed.`, the backup directory, the log path, and the last 80 log lines.
+
+If you run bootstrap from LuCI Terminal / ttyd, use:
+
+```sh
+INSTALL_TTYD=0 ROUTER_NAME='my-router' /tmp/bootstrap.sh
+```
+
+Installing or updating `ttyd` can interrupt the current web terminal session. With `INSTALL_TTYD=0`, the critical Tailscale, Podkop, and Remnawave steps can finish first.
 
 Recovery for offline Tailscale:
 
@@ -338,19 +426,54 @@ ROUTER_NAME='my-router' \
 /tmp/bootstrap.sh
 ```
 
-Скрипт задаёт два вопроса:
+Скрипт задаёт три вопроса:
 
 ```text
+============================================================
+[INPUT REQUIRED] Router/device name
+[ТРЕБУЕТСЯ ВВОД] Имя роутера / устройства
+------------------------------------------------------------
+Example / пример:
+  nanopi-r3s-home
+  xiaomi-ax300t-flat
+  openwrt-office-1
+
+This name will be used as Tailscale hostname.
+Это имя будет использовано как имя устройства в Tailscale.
+============================================================
+Enter Router/device name / Введите имя роутера:
+
+============================================================
 Tailscale auth key / ключ удалённого доступа Tailscale
-Press Enter to keep existing authorization or use browser login if needed.
-Нажмите Enter, чтобы оставить текущую авторизацию или использовать вход через браузер при необходимости.
+[INPUT REQUIRED] Tailscale auth key
+[ТРЕБУЕТСЯ ВВОД] Ключ авторизации Tailscale
+------------------------------------------------------------
+Example / пример:
+  tskey-auth-xxxxxxxxxxxxxxxx
+
+Leave empty to use browser login if auth key is not available.
+Оставьте пустым, чтобы использовать вход через браузер, если ключа нет.
+
+The key will not be printed in logs.
+Ключ не будет выводиться в логах.
+============================================================
 Enter Tailscale auth key / Введите Tailscale auth key:
 
+============================================================
 Remnawave subscription URL / ссылка на подписку Remnawave
-Press Enter to keep existing subscription or skip if none.
-Нажмите Enter, чтобы оставить старую подписку или пропустить, если её ещё нет.
-Enter subscription URL / Введите ссылку на подписку:
+[INPUT REQUIRED] Remnawave subscription URL
+[ТРЕБУЕТСЯ ВВОД] Ссылка на подписку Remnawave
+------------------------------------------------------------
+Example / пример:
+  https://sub.example.com/token
+
+Leave empty to keep existing subscription if already configured.
+Оставьте пустым, чтобы оставить старую подписку, если она уже настроена.
+============================================================
+Enter Remnawave subscription URL / Введите ссылку на подписку Remnawave:
 ```
+
+Имя роутера нормализуется в безопасный для Tailscale вид: `NanoPi R3S Home` станет `nanopi-r3s-home`. `TAILSCALE_HOSTNAME` может переопределить только имя в Tailscale. Используйте `SET_OPENWRT_HOSTNAME=0`, если не нужно менять hostname самой OpenWrt-системы.
 
 Если нажать Enter на вопросе про Tailscale auth key, скрипт сохранит текущую авторизацию Tailscale, если она уже есть, или покажет browser login. Если нажать Enter на вопросе про subscription URL, скрипт использует сохранённую ссылку из `/etc/podkop-remnawave/subscription.conf`, если она есть, или пропустит импорт.
 
@@ -369,3 +492,46 @@ SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
 - не добавляйте реальные subscription tokens, auth keys, UUID, private keys и полные proxy-ссылки в GitHub;
 - не открывайте SSH или LuCI в WAN;
 - используйте доступ к роутеру через Tailscale IPv4.
+
+### Финальный статус и логи
+
+При успешном завершении bootstrap выводит:
+
+```text
+[SUCCESS] Bootstrap completed successfully.
+Router name:
+Tailscale IP:
+SSH command:
+LuCI URL:
+Podkop status:
+Subscription import count:
+Backup dir:
+```
+
+Важные сообщения пишутся в лог:
+
+```text
+/root/podkop-bootstrap.log
+```
+
+После полной установки требуется перезагрузка роутера. По умолчанию `REBOOT_AFTER=1`, поэтому роутер перезагружается автоматически через `REBOOT_DELAY` секунд. Если автоматическая перезагрузка не нужна:
+
+```sh
+REBOOT_AFTER=0 ROUTER_NAME='my-router' /tmp/bootstrap.sh
+```
+
+После этого перезагрузите вручную:
+
+```sh
+sync && reboot
+```
+
+Если bootstrap завершился с ошибкой, автоматическая перезагрузка не выполняется. Скрипт выводит `[ERROR] Bootstrap failed.`, backup directory, путь к логу и последние 80 строк лога.
+
+Если запускаете bootstrap из LuCI Terminal / ttyd, используйте:
+
+```sh
+INSTALL_TTYD=0 ROUTER_NAME='my-router' /tmp/bootstrap.sh
+```
+
+Установка или обновление `ttyd` может оборвать текущую web-terminal-сессию. С `INSTALL_TTYD=0` критичные шаги Tailscale, Podkop и Remnawave успеют завершиться.

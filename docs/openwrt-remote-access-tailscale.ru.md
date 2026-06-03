@@ -36,19 +36,54 @@ ROUTER_NAME='openwrt-router' \
   /tmp/bootstrap-openwrt-router.sh
 ```
 
-Скрипт задаёт только два вопроса:
+Скрипт задаёт три вопроса, если значения не переданы через переменные окружения:
 
 ```text
+============================================================
+[INPUT REQUIRED] Router/device name
+[ТРЕБУЕТСЯ ВВОД] Имя роутера / устройства
+------------------------------------------------------------
+Example / пример:
+  nanopi-r3s-home
+  xiaomi-ax300t-flat
+  openwrt-office-1
+
+This name will be used as Tailscale hostname.
+Это имя будет использовано как имя устройства в Tailscale.
+============================================================
+Enter Router/device name / Введите имя роутера:
+
+============================================================
 Tailscale auth key / ключ удалённого доступа Tailscale
-Press Enter to keep existing authorization or use browser login if needed.
-Нажмите Enter, чтобы оставить текущую авторизацию или использовать вход через браузер при необходимости.
+[INPUT REQUIRED] Tailscale auth key
+[ТРЕБУЕТСЯ ВВОД] Ключ авторизации Tailscale
+------------------------------------------------------------
+Example / пример:
+  tskey-auth-xxxxxxxxxxxxxxxx
+
+Leave empty to use browser login if auth key is not available.
+Оставьте пустым, чтобы использовать вход через браузер, если ключа нет.
+
+The key will not be printed in logs.
+Ключ не будет выводиться в логах.
+============================================================
 Enter Tailscale auth key / Введите Tailscale auth key:
 
+============================================================
 Remnawave subscription URL / ссылка на подписку Remnawave
-Press Enter to keep existing subscription or skip if none.
-Нажмите Enter, чтобы оставить старую подписку или пропустить, если её ещё нет.
-Enter subscription URL / Введите ссылку на подписку:
+[INPUT REQUIRED] Remnawave subscription URL
+[ТРЕБУЕТСЯ ВВОД] Ссылка на подписку Remnawave
+------------------------------------------------------------
+Example / пример:
+  https://sub.example.com/token
+
+Leave empty to keep existing subscription if already configured.
+Оставьте пустым, чтобы оставить старую подписку, если она уже настроена.
+============================================================
+Enter Remnawave subscription URL / Введите ссылку на подписку Remnawave:
 ```
+
+Имя роутера нормализуется в безопасный для Tailscale вид. `TAILSCALE_HOSTNAME` может переопределить только имя в Tailscale. `SET_OPENWRT_HOSTNAME=0` отключает изменение hostname самой OpenWrt-системы.
 
 Auth key можно оставить пустым: bootstrap сохранит текущую авторизацию Tailscale, если она есть, или Tailscale покажет browser login. Subscription URL можно оставить пустым: bootstrap использует сохранённую ссылку из `/etc/podkop-remnawave/subscription.conf`, если она есть, или пропустит импорт.
 
@@ -78,6 +113,54 @@ INTERACTIVE=1
 Если `SUB_URL` не задан, подписка не импортируется, но Tailscale/LuCI setup всё равно выполняется.
 
 При `INTERACTIVE=0` вопросы не задаются. Если `SUB_URL` не передан через env, bootstrap также попробует использовать сохранённую подписку.
+
+---
+
+## Финальный статус и логи
+
+При успешном завершении bootstrap выводит:
+
+```text
+[SUCCESS] Bootstrap completed successfully.
+Router name:
+Tailscale IP:
+SSH command:
+LuCI URL:
+Podkop status:
+Subscription import count:
+Backup dir:
+```
+
+Лог bootstrap:
+
+```text
+/root/podkop-bootstrap.log
+```
+
+После полной установки требуется перезагрузка роутера. По умолчанию `REBOOT_AFTER=1`, поэтому роутер перезагружается автоматически через `REBOOT_DELAY` секунд.
+
+Если автоматическая перезагрузка не нужна:
+
+```sh
+REBOOT_AFTER=0 ROUTER_NAME='my-router' sh /tmp/bootstrap-openwrt-router.sh
+```
+
+После этого выполните вручную:
+
+```sh
+sync
+reboot
+```
+
+Если bootstrap завершился с ошибкой, автоматическая перезагрузка не выполняется. Скрипт показывает backup directory, путь к логу и последние 80 строк лога.
+
+Если запускаете bootstrap из LuCI Terminal / ttyd, безопасный вариант:
+
+```sh
+INSTALL_TTYD=0 ROUTER_NAME='my-router' sh /tmp/bootstrap-openwrt-router.sh
+```
+
+Установка или обновление `ttyd` может оборвать текущую web-terminal-сессию.
 
 ---
 
