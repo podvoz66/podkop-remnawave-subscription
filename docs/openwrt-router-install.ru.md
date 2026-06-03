@@ -71,7 +71,39 @@ Podkop-Router-All-Reality
 
 
 
-## Основная команда установки
+## Быстрый запуск
+
+### 1. Новый роутер OpenWrt
+
+Используйте этот вариант, если Podkop ещё не установлен или роутер настраивается с нуля.
+
+```sh
+wget -O /tmp/install.sh \
+  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/install.sh
+
+chmod +x /tmp/install.sh
+
+SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
+  /tmp/install.sh
+```
+
+### 2. Уже настроенный роутер OpenWrt
+
+Используйте этот вариант, если Podkop уже установлен, а нужно только установить или обновить Remnawave updater и subscription URL.
+
+```sh
+wget -O /tmp/install-subscription-on-existing-podkop.sh \
+  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/install-subscription-on-existing-podkop.sh
+
+chmod +x /tmp/install-subscription-on-existing-podkop.sh
+
+SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
+  /tmp/install-subscription-on-existing-podkop.sh
+```
+
+`ROUTER_SUBSCRIPTION_TOKEN` замените на token отдельного router-пользователя Remnawave. Не используйте здесь mobile-подписку и не публикуйте реальный token в GitHub.
+
+## Интерактивная установка
 
 
 

@@ -42,7 +42,39 @@ scripts/update-podkop-from-remnawave.sh   Main OpenWrt script
 examples/subscription.conf.example        Example config file
 ```
 
-## Installation on OpenWrt
+## Quick Start
+
+### 1. New OpenWrt Router
+
+Use this option when Podkop is not installed yet or the router is being configured from scratch.
+
+```sh
+wget -O /tmp/install.sh \
+  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/install.sh
+
+chmod +x /tmp/install.sh
+
+SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
+  /tmp/install.sh
+```
+
+### 2. Existing OpenWrt Router
+
+Use this option when Podkop is already installed and you only need to install or update the Remnawave updater and subscription URL.
+
+```sh
+wget -O /tmp/install-subscription-on-existing-podkop.sh \
+  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/install-subscription-on-existing-podkop.sh
+
+chmod +x /tmp/install-subscription-on-existing-podkop.sh
+
+SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
+  /tmp/install-subscription-on-existing-podkop.sh
+```
+
+Replace `ROUTER_SUBSCRIPTION_TOKEN` with the token for a dedicated Remnawave router user. Do not use a mobile subscription here and do not publish a real token to GitHub.
+
+## Manual Installation on OpenWrt
 
 ```sh
 mkdir -p /etc/podkop-remnawave
