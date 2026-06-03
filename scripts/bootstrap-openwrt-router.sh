@@ -76,7 +76,7 @@ sanitize_hostname() {
   name="$1"
 
   printf '%s' "$name" \
-    | tr '[:upper:]' '[:lower:]' \
+    | tr 'A-Z' 'a-z' \
     | sed 's/[^a-z0-9-]/-/g; s/--*/-/g; s/^-//; s/-$//'
 }
 
