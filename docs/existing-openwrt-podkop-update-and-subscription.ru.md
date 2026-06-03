@@ -31,13 +31,22 @@ wget -O /tmp/bootstrap-openwrt-router.sh \
 chmod +x /tmp/bootstrap-openwrt-router.sh
 
 ROUTER_NAME='openwrt-router' \
-SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
   /tmp/bootstrap-openwrt-router.sh
 ```
 
-Для Tailscale без browser login:
+Скрипт задаёт только два вопроса:
+
+```text
+Enter Tailscale auth key for remote access, or press Enter to use browser login:
+Enter Remnawave subscription URL, or press Enter to skip subscription import:
+```
+
+Auth key можно оставить пустым для browser login. Subscription URL можно оставить пустым, чтобы пропустить импорт подписки.
+
+Для fully non-interactive запуска:
 
 ```sh
+INTERACTIVE=0 \
 TAILSCALE_AUTHKEY='TS_AUTH_KEY_PLACEHOLDER' \
 ROUTER_NAME='openwrt-router' \
 SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
@@ -47,6 +56,7 @@ SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
 Полезные режимы:
 
 ```sh
+INTERACTIVE=0             # не задавать вопросы при старте
 DRY_RUN=1                 # показать действия без применения
 INSTALL_PODKOP=0          # не ставить Podkop, если он отсутствует
 INSTALL_TTYD=0            # не ставить ttyd
@@ -64,8 +74,8 @@ Bootstrap не открывает SSH, LuCI или другие WAN-порты. 
 1. устанавливает пакеты `tailscale`, `kmod-tun`, `iptables-nft`, `ip6tables-nft`, `ca-bundle`, `ca-certificates`;
 2. включает автозапуск Tailscale;
 3. запускает `tailscaled`;
-4. отдельно спрашивает `Tailscale auth key`;
-5. отдельно спрашивает имя роутера;
+4. спрашивает `Tailscale auth key`, если он не задан через env;
+5. спрашивает `Remnawave subscription URL`, если он не задан через env;
 6. останавливает orphan `sing-box`, если он мешает Tailscale;
 7. выполняет `tailscale up --accept-dns=false --ssh=false --hostname=...`;
 8. показывает Tailscale IPv4;

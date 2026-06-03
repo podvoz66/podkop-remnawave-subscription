@@ -55,22 +55,40 @@ wget -O /tmp/bootstrap-openwrt-router.sh \
 chmod +x /tmp/bootstrap-openwrt-router.sh
 
 ROUTER_NAME='openwrt-router' \
-SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
   /tmp/bootstrap-openwrt-router.sh
 ```
 
-For unattended Tailscale enrollment, pass an auth key through the environment. Do not commit a real key:
+The script asks exactly two startup questions:
+
+```text
+Enter Tailscale auth key for remote access, or press Enter to use browser login:
+Enter Remnawave subscription URL, or press Enter to skip subscription import:
+```
+
+Leave the Tailscale auth key empty to use browser login. Leave the subscription URL empty to skip subscription import.
+
+For fully non-interactive setup, pass values through the environment and set `INTERACTIVE=0`. Do not commit a real auth key or subscription URL:
 
 ```sh
+INTERACTIVE=0 \
 TAILSCALE_AUTHKEY='TS_AUTH_KEY_PLACEHOLDER' \
 ROUTER_NAME='openwrt-router' \
 SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
   /tmp/bootstrap-openwrt-router.sh
 ```
 
+You can also run non-interactively without either value:
+
+```sh
+INTERACTIVE=0 \
+ROUTER_NAME='openwrt-router' \
+  /tmp/bootstrap-openwrt-router.sh
+```
+
 Useful toggles:
 
 ```sh
+INTERACTIVE=0             # do not ask startup questions
 INSTALL_RU_LOCALE=0       # skip Russian LuCI locale packages
 INSTALL_TTYD=0            # skip ttyd/luci-app-ttyd
 INSTALL_PODKOP=0          # do not install Podkop if missing

@@ -20,6 +20,7 @@ INSTALL_TTYD="${INSTALL_TTYD:-1}"
 INSTALL_PODKOP="${INSTALL_PODKOP:-auto}"
 ENABLE_LUCI_TAILSCALE="${ENABLE_LUCI_TAILSCALE:-1}"
 DRY_RUN="${DRY_RUN:-0}"
+INTERACTIVE="${INTERACTIVE:-1}"
 
 BACKUP_DIR=""
 ROUTER_STATE=""
@@ -134,6 +135,7 @@ validate_env() {
   validate_flag INSTALL_TTYD "$INSTALL_TTYD"
   validate_flag ENABLE_LUCI_TAILSCALE "$ENABLE_LUCI_TAILSCALE"
   validate_flag DRY_RUN "$DRY_RUN"
+  validate_flag INTERACTIVE "$INTERACTIVE"
 
   case "$INSTALL_PODKOP" in
     auto|0|1) ;;
@@ -151,6 +153,27 @@ validate_env() {
         exit 1
         ;;
     esac
+  fi
+}
+
+prompt_startup_inputs() {
+  if [ "$INTERACTIVE" != "1" ]; then
+    info "INTERACTIVE=0. Using environment variables only."
+    return 0
+  fi
+
+  if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
+    info "TAILSCALE_AUTHKEY is already provided via environment."
+  else
+    printf '%s' "Enter Tailscale auth key for remote access, or press Enter to use browser login: "
+    IFS= read TAILSCALE_AUTHKEY || TAILSCALE_AUTHKEY=""
+  fi
+
+  if [ -n "${SUB_URL:-}" ]; then
+    info "SUB_URL is already provided via environment: $(mask_url "$SUB_URL")"
+  else
+    printf '%s' "Enter Remnawave subscription URL, or press Enter to skip subscription import: "
+    IFS= read SUB_URL || SUB_URL=""
   fi
 }
 
@@ -851,6 +874,8 @@ final_report() {
 validate_env
 require_root_openwrt
 pkg_detect
+prompt_startup_inputs
+validate_env
 preflight
 make_backup
 install_dependencies

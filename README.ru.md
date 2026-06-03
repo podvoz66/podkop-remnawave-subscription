@@ -38,22 +38,40 @@ wget -O /tmp/bootstrap-openwrt-router.sh \
 chmod +x /tmp/bootstrap-openwrt-router.sh
 
 ROUTER_NAME='openwrt-router' \
-SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
   /tmp/bootstrap-openwrt-router.sh
 ```
 
-Для установки Tailscale без browser login передайте auth key через переменную окружения. Не коммитьте реальный ключ:
+Скрипт задаёт ровно два вопроса при старте:
+
+```text
+Enter Tailscale auth key for remote access, or press Enter to use browser login:
+Enter Remnawave subscription URL, or press Enter to skip subscription import:
+```
+
+Tailscale auth key можно оставить пустым, тогда будет browser login. Subscription URL можно оставить пустым, тогда импорт подписки будет пропущен.
+
+Для полностью non-interactive запуска передайте значения через переменные окружения и задайте `INTERACTIVE=0`. Не коммитьте реальный auth key или subscription URL:
 
 ```sh
+INTERACTIVE=0 \
 TAILSCALE_AUTHKEY='TS_AUTH_KEY_PLACEHOLDER' \
 ROUTER_NAME='openwrt-router' \
 SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
   /tmp/bootstrap-openwrt-router.sh
 ```
 
+Можно также запустить non-interactive без этих значений:
+
+```sh
+INTERACTIVE=0 \
+ROUTER_NAME='openwrt-router' \
+  /tmp/bootstrap-openwrt-router.sh
+```
+
 Полезные переключатели:
 
 ```sh
+INTERACTIVE=0             # не задавать вопросы при старте
 INSTALL_RU_LOCALE=0       # не ставить русскую локализацию LuCI
 INSTALL_TTYD=0            # не ставить ttyd/luci-app-ttyd
 INSTALL_PODKOP=0          # не ставить Podkop, если он отсутствует
