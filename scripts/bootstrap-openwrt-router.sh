@@ -43,6 +43,7 @@ SINGBOX_KILLED_WARN=0
 TAILSCALE_AUTH_MODE="existing-or-browser"
 SUBSCRIPTION_SOURCE="skipped"
 BOOTSTRAP_COMPLETED=0
+BOOTSTRAP_WARNINGS=0
 
 echo "=== OpenWrt Podkop + Remnawave + Tailscale bootstrap ==="
 
@@ -68,6 +69,7 @@ step() {
 }
 
 warn() {
+  BOOTSTRAP_WARNINGS=1
   log_line "[WARN] $*"
 }
 
@@ -181,6 +183,29 @@ validate_env() {
         exit 1
         ;;
     esac
+  fi
+}
+
+is_valid_url() {
+  value="$1"
+
+  case "$value" in
+    http://*|https://*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+invalid_sub_url_message() {
+  attempts_left="$1"
+
+  if [ "$attempts_left" -gt 0 ]; then
+    err "Invalid Remnawave subscription URL."
+    err "URL must start with http:// or https://."
+    info "Please try again. Attempts left: $attempts_left"
+  else
+    warn "Remnawave subscription URL is still invalid after 3 attempts."
+    warn "Skipping subscription import."
+    warn "Podkop keys will not be updated from Remnawave during this run."
   fi
 }
 
@@ -418,17 +443,39 @@ prompt_startup_inputs() {
     info "Remnawave subscription URL provided by environment: $(mask_url "$SUB_URL")"
   else
     print_sub_url_prompt
-    printf '%s' "Enter Remnawave subscription URL / Введите ссылку на подписку Remnawave: "
-    IFS= read SUB_URL || SUB_URL=""
-    if [ -n "$SUB_URL" ]; then
-      SUBSCRIPTION_SOURCE="entered"
-    elif load_existing_sub_url; then
-      SUBSCRIPTION_SOURCE="existing"
-      info "Using existing subscription URL from $CONF: $(mask_url "$SUB_URL")"
-    else
-      SUBSCRIPTION_SOURCE="skipped"
-      warn "No SUB_URL entered and no existing subscription config found. Subscription import will be skipped."
-    fi
+    sub_attempt=1
+    while [ "$sub_attempt" -le 3 ]; do
+      printf '%s' "Enter Remnawave subscription URL / Введите ссылку на подписку Remnawave: "
+      IFS= read SUB_URL || SUB_URL=""
+
+      if [ -z "$SUB_URL" ]; then
+        if load_existing_sub_url; then
+          SUBSCRIPTION_SOURCE="existing"
+          info "Using existing subscription URL from $CONF: $(mask_url "$SUB_URL")"
+        else
+          SUBSCRIPTION_SOURCE="skipped"
+          warn "No SUB_URL entered and no existing subscription config found. Subscription import will be skipped."
+        fi
+        break
+      fi
+
+      if is_valid_url "$SUB_URL"; then
+        SUBSCRIPTION_SOURCE="entered"
+        break
+      fi
+
+      SUB_URL=""
+      attempts_left=$((3 - sub_attempt))
+      invalid_sub_url_message "$attempts_left"
+
+      if [ "$attempts_left" -eq 0 ]; then
+        SUBSCRIPTION_SOURCE="skipped-invalid-url"
+        SUB_IMPORT_COUNT=0
+        break
+      fi
+
+      sub_attempt=$((sub_attempt + 1))
+    done
   fi
 }
 
@@ -1010,6 +1057,11 @@ install_updater_and_cron() {
 }
 
 write_subscription_config() {
+  if [ "$SUBSCRIPTION_SOURCE" = "skipped-invalid-url" ]; then
+    SUB_IMPORT_COUNT=0
+    return 1
+  fi
+
   if [ -z "${SUB_URL:-}" ]; then
     warn "SUB_URL is not set. Subscription import will be skipped."
     SUB_IMPORT_COUNT="skipped"
@@ -1108,7 +1160,11 @@ final_report() {
     singbox_final="missing"
   fi
 
-  log_line "[SUCCESS] Bootstrap completed successfully."
+  if [ "$BOOTSTRAP_WARNINGS" = "1" ]; then
+    log_line "[SUCCESS] Bootstrap completed successfully with warnings."
+  else
+    log_line "[SUCCESS] Bootstrap completed successfully."
+  fi
   log_line ""
   log_line "Router name input: $ROUTER_NAME_INPUT"
   log_line "Router name: $ROUTER_NAME_SAFE"
