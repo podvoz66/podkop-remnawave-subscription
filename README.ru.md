@@ -44,11 +44,11 @@ ROUTER_NAME='openwrt-router' \
 Скрипт задаёт ровно два вопроса при старте:
 
 ```text
-Enter Tailscale auth key for remote access, or press Enter to use browser login:
-Enter Remnawave subscription URL, or press Enter to skip subscription import:
+Enter Tailscale auth key for remote access, or press Enter to keep existing / use browser login if needed:
+Enter Remnawave subscription URL, or press Enter to keep existing / skip if none:
 ```
 
-Tailscale auth key можно оставить пустым, тогда будет browser login. Subscription URL можно оставить пустым, тогда импорт подписки будет пропущен.
+Tailscale auth key можно оставить пустым: если роутер уже авторизован в Tailscale, текущая авторизация сохранится; иначе Tailscale покажет browser login. Subscription URL можно оставить пустым: если в `/etc/podkop-remnawave/subscription.conf` уже есть сохранённая ссылка, она будет использована; иначе импорт подписки будет пропущен.
 
 Для полностью non-interactive запуска передайте значения через переменные окружения и задайте `INTERACTIVE=0`. Не коммитьте реальный auth key или subscription URL:
 
@@ -68,6 +68,8 @@ ROUTER_NAME='openwrt-router' \
   /tmp/bootstrap-openwrt-router.sh
 ```
 
+При `INTERACTIVE=0` без `SUB_URL` bootstrap использует сохранённую подписку, если она есть. Без `TAILSCALE_AUTHKEY` он сохраняет существующее состояние Tailscale или переходит к browser login.
+
 Полезные переключатели:
 
 ```sh
@@ -79,7 +81,7 @@ ENABLE_LUCI_TAILSCALE=0   # не менять uhttpd rfc1918_filter
 DRY_RUN=1                 # показать действия без применения
 ```
 
-Если `SUB_URL` не задан, bootstrap не падает: он настраивает роутер и Tailscale, а импорт подписки пропускает с предупреждением.
+Если `SUB_URL` не задан и сохранённой подписки нет, bootstrap не падает: он настраивает роутер и Tailscale, а импорт подписки пропускает с предупреждением.
 
 Восстановление, если роутер offline в Tailscale:
 

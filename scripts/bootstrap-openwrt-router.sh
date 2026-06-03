@@ -32,6 +32,8 @@ TAILSCALE_IP=""
 SUB_IMPORT_COUNT="skipped"
 PODKOP_STOPPED_WARN=0
 SINGBOX_KILLED_WARN=0
+TAILSCALE_AUTH_MODE="existing-or-browser"
+SUBSCRIPTION_SOURCE="skipped"
 
 echo "=== OpenWrt Podkop + Remnawave + Tailscale bootstrap ==="
 
@@ -156,24 +158,93 @@ validate_env() {
   fi
 }
 
+load_existing_sub_url() {
+  if [ ! -f "$CONF" ]; then
+    return 1
+  fi
+
+  sub_line="$(sed -n '/^SUB_URL=/{p;q;}' "$CONF" 2>/dev/null || true)"
+  if [ -z "$sub_line" ]; then
+    return 1
+  fi
+
+  sub_value="$(printf '%s' "$sub_line" | sed 's/^SUB_URL=//; s/[[:space:]]*$//')"
+
+  case "$sub_value" in
+    \"*\")
+      sub_value="${sub_value#\"}"
+      sub_value="${sub_value%\"}"
+      ;;
+    \'*\')
+      sub_value="${sub_value#\'}"
+      sub_value="${sub_value%\'}"
+      ;;
+  esac
+
+  if [ -z "$sub_value" ]; then
+    return 1
+  fi
+
+  case "$sub_value" in
+    http://*|https://*) ;;
+    *) return 1 ;;
+  esac
+
+  SUB_URL="$sub_value"
+  return 0
+}
+
 prompt_startup_inputs() {
   if [ "$INTERACTIVE" != "1" ]; then
     info "INTERACTIVE=0. Using environment variables only."
+    if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
+      TAILSCALE_AUTH_MODE="env-key"
+    else
+      TAILSCALE_AUTH_MODE="existing-or-browser"
+    fi
+
+    if [ -n "${SUB_URL:-}" ]; then
+      SUBSCRIPTION_SOURCE="env"
+      info "SUB_URL is already provided via environment: $(mask_url "$SUB_URL")"
+    elif load_existing_sub_url; then
+      SUBSCRIPTION_SOURCE="existing"
+      info "Using existing subscription URL from $CONF: $(mask_url "$SUB_URL")"
+    else
+      SUBSCRIPTION_SOURCE="skipped"
+      warn "No SUB_URL provided and no existing subscription config found. Subscription import will be skipped."
+    fi
+
     return 0
   fi
 
   if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
+    TAILSCALE_AUTH_MODE="env-key"
     info "TAILSCALE_AUTHKEY is already provided via environment."
   else
-    printf '%s' "Enter Tailscale auth key for remote access, or press Enter to use browser login: "
+    printf '%s' "Enter Tailscale auth key for remote access, or press Enter to keep existing / use browser login if needed: "
     IFS= read TAILSCALE_AUTHKEY || TAILSCALE_AUTHKEY=""
+    if [ -n "$TAILSCALE_AUTHKEY" ]; then
+      TAILSCALE_AUTH_MODE="entered-key"
+    else
+      TAILSCALE_AUTH_MODE="existing-or-browser"
+    fi
   fi
 
   if [ -n "${SUB_URL:-}" ]; then
+    SUBSCRIPTION_SOURCE="env"
     info "SUB_URL is already provided via environment: $(mask_url "$SUB_URL")"
   else
-    printf '%s' "Enter Remnawave subscription URL, or press Enter to skip subscription import: "
+    printf '%s' "Enter Remnawave subscription URL, or press Enter to keep existing / skip if none: "
     IFS= read SUB_URL || SUB_URL=""
+    if [ -n "$SUB_URL" ]; then
+      SUBSCRIPTION_SOURCE="entered"
+    elif load_existing_sub_url; then
+      SUBSCRIPTION_SOURCE="existing"
+      info "Using existing subscription URL from $CONF: $(mask_url "$SUB_URL")"
+    else
+      SUBSCRIPTION_SOURCE="skipped"
+      warn "No SUB_URL entered and no existing subscription config found. Subscription import will be skipped."
+    fi
   fi
 }
 
@@ -618,14 +689,14 @@ run_tailscale_up() {
   if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
     info "Using provided Tailscale auth key. The key will not be printed."
     if tailscale up --auth-key="$TAILSCALE_AUTHKEY" --accept-dns=false --ssh=false --hostname="$ROUTER_NAME_SAFE" >"$tmp" 2>&1; then
-      cat "$tmp"
+      sed 's/tskey-[^[:space:]]*/tskey-***MASKED***/g' "$tmp"
       rm -f "$tmp"
       return 0
     fi
   else
-    info "No Tailscale auth key provided. Browser login flow will be used."
+    info "No Tailscale auth key provided. Existing state or browser login flow will be used."
     if tailscale up --accept-dns=false --ssh=false --hostname="$ROUTER_NAME_SAFE" >"$tmp" 2>&1; then
-      cat "$tmp"
+      sed 's/tskey-[^[:space:]]*/tskey-***MASKED***/g' "$tmp"
       rm -f "$tmp"
       return 0
     fi
@@ -761,7 +832,13 @@ write_subscription_config() {
   if [ -z "${SUB_URL:-}" ]; then
     warn "SUB_URL is not set. Subscription import will be skipped."
     SUB_IMPORT_COUNT="skipped"
+    SUBSCRIPTION_SOURCE="skipped"
     return 1
+  fi
+
+  if [ "$SUBSCRIPTION_SOURCE" = "existing" ]; then
+    info "Keeping existing subscription config: $(mask_url "$SUB_URL")"
+    return 0
   fi
 
   step "Write subscription config"
@@ -857,6 +934,8 @@ final_report() {
   echo "LuCI URL: http://$TAILSCALE_IP/"
   echo "Podkop status: $podkop_final"
   echo "sing-box status: $singbox_final"
+  echo "Tailscale auth: $TAILSCALE_AUTH_MODE"
+  echo "Subscription source: $SUBSCRIPTION_SOURCE"
   echo "Subscription import count: $SUB_IMPORT_COUNT"
   echo "Backup dir: ${BACKUP_DIR:-not-created}"
 

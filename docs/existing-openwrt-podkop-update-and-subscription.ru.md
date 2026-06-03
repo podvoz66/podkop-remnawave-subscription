@@ -37,11 +37,11 @@ ROUTER_NAME='openwrt-router' \
 Скрипт задаёт только два вопроса:
 
 ```text
-Enter Tailscale auth key for remote access, or press Enter to use browser login:
-Enter Remnawave subscription URL, or press Enter to skip subscription import:
+Enter Tailscale auth key for remote access, or press Enter to keep existing / use browser login if needed:
+Enter Remnawave subscription URL, or press Enter to keep existing / skip if none:
 ```
 
-Auth key можно оставить пустым для browser login. Subscription URL можно оставить пустым, чтобы пропустить импорт подписки.
+Auth key можно оставить пустым: bootstrap сохранит текущую авторизацию Tailscale, если она есть, или Tailscale покажет browser login. Subscription URL можно оставить пустым: bootstrap использует сохранённую ссылку из `/etc/podkop-remnawave/subscription.conf`, если она есть, или пропустит импорт.
 
 Для fully non-interactive запуска:
 
@@ -62,6 +62,8 @@ INSTALL_PODKOP=0          # не ставить Podkop, если он отсут
 INSTALL_TTYD=0            # не ставить ttyd
 ENABLE_LUCI_TAILSCALE=0   # не менять uhttpd rfc1918_filter
 ```
+
+При `INTERACTIVE=0` вопросы не задаются. Если `SUB_URL` не передан через env, bootstrap также попробует использовать сохранённую подписку.
 
 Bootstrap не открывает SSH, LuCI или другие WAN-порты. Доступ после настройки идёт через Tailscale IPv4.
 

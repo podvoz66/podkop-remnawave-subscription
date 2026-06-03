@@ -61,11 +61,11 @@ ROUTER_NAME='openwrt-router' \
 The script asks exactly two startup questions:
 
 ```text
-Enter Tailscale auth key for remote access, or press Enter to use browser login:
-Enter Remnawave subscription URL, or press Enter to skip subscription import:
+Enter Tailscale auth key for remote access, or press Enter to keep existing / use browser login if needed:
+Enter Remnawave subscription URL, or press Enter to keep existing / skip if none:
 ```
 
-Leave the Tailscale auth key empty to use browser login. Leave the subscription URL empty to skip subscription import.
+Leave the Tailscale auth key empty to keep the current Tailscale authorization if it already exists; otherwise Tailscale will use browser login. Leave the subscription URL empty to reuse the saved `/etc/podkop-remnawave/subscription.conf` URL if present; otherwise subscription import is skipped.
 
 For fully non-interactive setup, pass values through the environment and set `INTERACTIVE=0`. Do not commit a real auth key or subscription URL:
 
@@ -85,6 +85,8 @@ ROUTER_NAME='openwrt-router' \
   /tmp/bootstrap-openwrt-router.sh
 ```
 
+With `INTERACTIVE=0` and no `SUB_URL`, bootstrap reuses the saved subscription URL if one exists. With no `TAILSCALE_AUTHKEY`, it keeps existing Tailscale state or falls back to browser login.
+
 Useful toggles:
 
 ```sh
@@ -96,7 +98,7 @@ ENABLE_LUCI_TAILSCALE=0   # do not change uhttpd rfc1918_filter
 DRY_RUN=1                 # print intended actions
 ```
 
-If `SUB_URL` is omitted, bootstrap still configures the router and Tailscale, then skips subscription import with a warning.
+If `SUB_URL` is omitted and no saved subscription exists, bootstrap still configures the router and Tailscale, then skips subscription import with a warning.
 
 Recovery for offline Tailscale:
 
