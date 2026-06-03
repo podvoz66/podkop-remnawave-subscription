@@ -1,4 +1,11 @@
-# Podkop Remnawave Subscription Updater
+## Language / Язык
+
+- [English](#english)
+- [Русский](#русский)
+
+# English
+
+## Podkop Remnawave Subscription Updater
 
 OpenWrt helper for importing a Remnawave router subscription into Podkop URLTest sections.
 
@@ -46,16 +53,26 @@ examples/subscription.conf.example        Example config file
 
 ### One-command OpenWrt bootstrap
 
-Use this option for a new router or an existing OpenWrt router where you want one script to detect the current state, install missing components, configure Tailscale remote access, enable LuCI over Tailscale, install or keep Podkop, and import the Remnawave router subscription.
+Use this option for one-command OpenWrt router setup on a new router or an existing OpenWrt router.
+
+Bootstrap:
+
+- detects OpenWrt version and router state;
+- installs/checks required packages;
+- configures Tailscale remote access;
+- configures LuCI access through Tailscale;
+- installs/checks Podkop;
+- installs Remnawave subscription updater;
+- imports or reuses saved Remnawave subscription;
+- creates backups;
+- does not open WAN ports.
 
 ```sh
-wget -O /tmp/bootstrap-openwrt-router.sh \
-  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/bootstrap-openwrt-router.sh
-
-chmod +x /tmp/bootstrap-openwrt-router.sh
-
-ROUTER_NAME='openwrt-router' \
-  /tmp/bootstrap-openwrt-router.sh
+wget -O /tmp/bootstrap.sh \
+  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/bootstrap-openwrt-router.sh && \
+chmod +x /tmp/bootstrap.sh && \
+ROUTER_NAME='my-router' \
+/tmp/bootstrap.sh
 ```
 
 The script asks exactly two startup questions:
@@ -290,3 +307,65 @@ Do not commit real subscription tokens, UUIDs, private keys, or full proxy links
 ## Changelog
 
 Updater now preserves and imports Trojan and Hysteria2 links from Remnawave/converter subscriptions.
+
+# Русский
+
+## Podkop Remnawave Subscription Updater
+
+Помощник для OpenWrt, который настраивает роутер для Podkop, Remnawave subscription и удалённого доступа через Tailscale.
+
+### Быстрая установка OpenWrt router bootstrap
+
+Используйте этот вариант для нового роутера или уже настроенного OpenWrt-роутера.
+
+Bootstrap:
+
+- определяет версию OpenWrt и состояние роутера;
+- устанавливает/проверяет нужные пакеты;
+- настраивает удалённый доступ через Tailscale;
+- настраивает доступ к LuCI через Tailscale;
+- устанавливает/проверяет Podkop;
+- устанавливает Remnawave subscription updater;
+- импортирует или переиспользует сохранённую Remnawave-подписку;
+- создаёт backup;
+- не открывает WAN-порты.
+
+```sh
+wget -O /tmp/bootstrap.sh \
+  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/bootstrap-openwrt-router.sh && \
+chmod +x /tmp/bootstrap.sh && \
+ROUTER_NAME='my-router' \
+/tmp/bootstrap.sh
+```
+
+Скрипт задаёт два вопроса:
+
+```text
+Tailscale auth key / ключ удалённого доступа Tailscale
+Press Enter to keep existing authorization or use browser login if needed.
+Нажмите Enter, чтобы оставить текущую авторизацию или использовать вход через браузер при необходимости.
+Enter Tailscale auth key / Введите Tailscale auth key:
+
+Remnawave subscription URL / ссылка на подписку Remnawave
+Press Enter to keep existing subscription or skip if none.
+Нажмите Enter, чтобы оставить старую подписку или пропустить, если её ещё нет.
+Enter subscription URL / Введите ссылку на подписку:
+```
+
+Если нажать Enter на вопросе про Tailscale auth key, скрипт сохранит текущую авторизацию Tailscale, если она уже есть, или покажет browser login. Если нажать Enter на вопросе про subscription URL, скрипт использует сохранённую ссылку из `/etc/podkop-remnawave/subscription.conf`, если она есть, или пропустит импорт.
+
+Полностью non-interactive запуск:
+
+```sh
+INTERACTIVE=0 \
+TAILSCALE_AUTHKEY='TS_AUTH_KEY_PLACEHOLDER' \
+ROUTER_NAME='my-router' \
+SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
+/tmp/bootstrap.sh
+```
+
+Безопасность:
+
+- не добавляйте реальные subscription tokens, auth keys, UUID, private keys и полные proxy-ссылки в GitHub;
+- не открывайте SSH или LuCI в WAN;
+- используйте доступ к роутеру через Tailscale IPv4.
