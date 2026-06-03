@@ -221,7 +221,10 @@ prompt_startup_inputs() {
     TAILSCALE_AUTH_MODE="env-key"
     info "TAILSCALE_AUTHKEY is already provided via environment."
   else
-    printf '%s' "Enter Tailscale auth key for remote access, or press Enter to keep existing / use browser login if needed: "
+    echo "Tailscale auth key / ключ удалённого доступа Tailscale"
+    echo "Press Enter to keep existing authorization or use browser login if needed."
+    echo "Нажмите Enter, чтобы оставить текущую авторизацию или использовать вход через браузер при необходимости."
+    printf '%s' "Enter Tailscale auth key / Введите Tailscale auth key: "
     IFS= read TAILSCALE_AUTHKEY || TAILSCALE_AUTHKEY=""
     if [ -n "$TAILSCALE_AUTHKEY" ]; then
       TAILSCALE_AUTH_MODE="entered-key"
@@ -234,7 +237,10 @@ prompt_startup_inputs() {
     SUBSCRIPTION_SOURCE="env"
     info "SUB_URL is already provided via environment: $(mask_url "$SUB_URL")"
   else
-    printf '%s' "Enter Remnawave subscription URL, or press Enter to keep existing / skip if none: "
+    echo "Remnawave subscription URL / ссылка на подписку Remnawave"
+    echo "Press Enter to keep existing subscription or skip if none."
+    echo "Нажмите Enter, чтобы оставить старую подписку или пропустить, если её ещё нет."
+    printf '%s' "Enter subscription URL / Введите ссылку на подписку: "
     IFS= read SUB_URL || SUB_URL=""
     if [ -n "$SUB_URL" ]; then
       SUBSCRIPTION_SOURCE="entered"

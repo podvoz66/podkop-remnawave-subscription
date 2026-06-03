@@ -61,8 +61,15 @@ ROUTER_NAME='openwrt-router' \
 The script asks exactly two startup questions:
 
 ```text
-Enter Tailscale auth key for remote access, or press Enter to keep existing / use browser login if needed:
-Enter Remnawave subscription URL, or press Enter to keep existing / skip if none:
+Tailscale auth key / ключ удалённого доступа Tailscale
+Press Enter to keep existing authorization or use browser login if needed.
+Нажмите Enter, чтобы оставить текущую авторизацию или использовать вход через браузер при необходимости.
+Enter Tailscale auth key / Введите Tailscale auth key:
+
+Remnawave subscription URL / ссылка на подписку Remnawave
+Press Enter to keep existing subscription or skip if none.
+Нажмите Enter, чтобы оставить старую подписку или пропустить, если её ещё нет.
+Enter subscription URL / Введите ссылку на подписку:
 ```
 
 Leave the Tailscale auth key empty to keep the current Tailscale authorization if it already exists; otherwise Tailscale will use browser login. Leave the subscription URL empty to reuse the saved `/etc/podkop-remnawave/subscription.conf` URL if present; otherwise subscription import is skipped.
