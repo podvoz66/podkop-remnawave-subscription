@@ -264,14 +264,27 @@ command_state() {
 
 service_state() {
   service="$1"
+  status_file="/tmp/bootstrap-service-status.$$"
+  status_rc=1
 
   if [ -x "/etc/init.d/$service" ]; then
-    "/etc/init.d/$service" status >/tmp/bootstrap-service-status.$$ 2>&1 || true
-    if grep -qi 'running' /tmp/bootstrap-service-status.$$; then
-      rm -f /tmp/bootstrap-service-status.$$
+    if "/etc/init.d/$service" status >"$status_file" 2>&1; then
+      status_rc=0
+    else
+      status_rc=$?
+    fi
+
+    if grep -qiE 'not[[:space:]-]*running|stopped|inactive' "$status_file"; then
+      rm -f "$status_file"
+      printf 'installed/not-running'
+    elif grep -qiE 'running|active' "$status_file"; then
+      rm -f "$status_file"
+      printf 'installed/running'
+    elif [ "$status_rc" -eq 0 ]; then
+      rm -f "$status_file"
       printf 'installed/running'
     else
-      rm -f /tmp/bootstrap-service-status.$$
+      rm -f "$status_file"
       printf 'installed/not-running'
     fi
   else
@@ -291,9 +304,11 @@ preflight() {
   [ -n "$OPENWRT_ARCH" ] || OPENWRT_ARCH="unknown"
 
   if [ -n "${ROUTER_NAME:-}" ]; then
+    router_name_input="$ROUTER_NAME"
     ROUTER_NAME_SAFE="$(sanitize_hostname "$ROUTER_NAME")"
   else
     current_name="$(uci -q get system.@system[0].hostname 2>/dev/null || hostname 2>/dev/null || echo openwrt)"
+    router_name_input="$current_name"
     ROUTER_NAME_SAFE="$(sanitize_hostname "$current_name")"
   fi
 
@@ -347,6 +362,7 @@ preflight() {
   echo "OpenWrt version: $OPENWRT_VERSION"
   echo "Target: $OPENWRT_TARGET"
   echo "Arch: $OPENWRT_ARCH"
+  echo "Router name input: $router_name_input"
   echo "Router name: $ROUTER_NAME_SAFE"
   echo "Package manager: $PKG"
   echo "opkg: $(command_state opkg)"
@@ -477,6 +493,11 @@ stop_orphan_singbox_for_tailscale() {
     SINGBOX_KILLED_WARN=1
     run_cmd killall sing-box || true
     sleep 2
+  fi
+
+  if is_dry_run; then
+    echo "[DRY_RUN] skip post-cleanup sing-box assertion"
+    return 0
   fi
 
   if pgrep -x sing-box >/dev/null 2>&1; then
@@ -781,7 +802,7 @@ run_subscription_update() {
 final_report() {
   step "Final report"
 
-  if ! is_dry_run; then
+  if command -v tailscale >/dev/null 2>&1; then
     TAILSCALE_IP="$(tailscale ip -4 2>/dev/null | head -n 1 || true)"
   fi
 
