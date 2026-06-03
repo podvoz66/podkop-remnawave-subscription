@@ -20,18 +20,56 @@ https://github.com/podvoz66/podkop-remnawave-subscription
 
 ---
 
+## One-command bootstrap
+
+Для нового или уже настроенного роутера можно использовать единый bootstrap-скрипт. Он сам определяет состояние роутера, делает backup, ставит недостающие зависимости, настраивает Tailscale, LuCI через Tailscale, Podkop и Remnawave subscription.
+
+```sh
+wget -O /tmp/bootstrap-openwrt-router.sh \
+  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/bootstrap-openwrt-router.sh
+
+chmod +x /tmp/bootstrap-openwrt-router.sh
+
+ROUTER_NAME='openwrt-router' \
+SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
+  /tmp/bootstrap-openwrt-router.sh
+```
+
+Для Tailscale без browser login:
+
+```sh
+TAILSCALE_AUTHKEY='TS_AUTH_KEY_PLACEHOLDER' \
+ROUTER_NAME='openwrt-router' \
+SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
+  /tmp/bootstrap-openwrt-router.sh
+```
+
+Полезные режимы:
+
+```sh
+DRY_RUN=1                 # показать действия без применения
+INSTALL_PODKOP=0          # не ставить Podkop, если он отсутствует
+INSTALL_TTYD=0            # не ставить ttyd
+ENABLE_LUCI_TAILSCALE=0   # не менять uhttpd rfc1918_filter
+```
+
+Bootstrap не открывает SSH, LuCI или другие WAN-порты. Доступ после настройки идёт через Tailscale IPv4.
+
+---
+
 ## Что делает скрипт
 
 Скрипт:
 
-1. устанавливает пакет `tailscale`;
+1. устанавливает пакеты `tailscale`, `kmod-tun`, `iptables-nft`, `ip6tables-nft`, `ca-bundle`, `ca-certificates`;
 2. включает автозапуск Tailscale;
 3. запускает `tailscaled`;
 4. отдельно спрашивает `Tailscale auth key`;
 5. отдельно спрашивает имя роутера;
-6. выполняет `tailscale up`;
-7. показывает Tailscale IPv4;
-8. не открывает SSH/LuCI в WAN.
+6. останавливает orphan `sing-box`, если он мешает Tailscale;
+7. выполняет `tailscale up --accept-dns=false --ssh=false --hostname=...`;
+8. показывает Tailscale IPv4;
+9. не открывает SSH/LuCI в WAN.
 
 После настройки можно заходить на роутер удалённо:
 
@@ -72,12 +110,12 @@ Tags: OFF
 После генерации Tailscale покажет ключ вида:
 
 ```text
-tskey-auth-xxxxxxxxxxxxxxxx
+TS_AUTH_KEY_PLACEHOLDER
 ```
 
 Важно:
 
-- не добавлять `tskey-auth-...` в GitHub;
+- не добавлять реальный auth key в GitHub;
 - не отправлять ключ в публичные чаты;
 - после настройки всех роутеров можно удалить или отключить auth key в Tailscale Admin Console.
 
@@ -116,7 +154,7 @@ Tailscale router name:
 В поле `Tailscale auth key` вставить ключ вида:
 
 ```text
-tskey-auth-xxxxxxxxxxxxxxxx
+TS_AUTH_KEY_PLACEHOLDER
 ```
 
 В поле `Tailscale router name` ввести понятное имя роутера, например:
@@ -140,7 +178,7 @@ openwrt-office
 Можно передать auth key и имя роутера сразу:
 
 ```sh
-TAILSCALE_AUTHKEY='tskey-auth-XXXX' \
+TAILSCALE_AUTHKEY='TS_AUTH_KEY_PLACEHOLDER' \
 TAILSCALE_HOSTNAME='nanopi-r3s-home' \
 sh /tmp/remote.sh
 ```
@@ -148,7 +186,7 @@ sh /tmp/remote.sh
 Полный вариант одной командой:
 
 ```sh
-TAILSCALE_AUTHKEY='tskey-auth-XXXX' \
+TAILSCALE_AUTHKEY='TS_AUTH_KEY_PLACEHOLDER' \
 TAILSCALE_HOSTNAME='nanopi-r3s-home' \
 sh -c '
 wget -O /tmp/remote.sh https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/install-remote-access-tailscale.sh &&
@@ -166,7 +204,7 @@ TAILSCALE_AUTHKEY="$TAILSCALE_AUTHKEY" TAILSCALE_HOSTNAME="$TAILSCALE_HOSTNAME" 
 Тогда скрипт выполнит:
 
 ```sh
-tailscale up --hostname=ИМЯ_РОУТЕРА --accept-dns=false
+tailscale up --accept-dns=false --ssh=false --hostname=ИМЯ_РОУТЕРА
 ```
 
 И Tailscale покажет ссылку авторизации.
@@ -190,6 +228,61 @@ pgrep -af tailscaled
 ```text
 tailscaled запущен
 tailscale ip -4 показывает адрес вида 100.x.y.z
+```
+
+---
+
+## Если роутер offline в Tailscale
+
+На OpenWrt 24.10.x Tailscale должен работать через nftables compatibility пакеты:
+
+```sh
+opkg update
+opkg install kmod-tun iptables-nft ip6tables-nft ca-bundle ca-certificates tailscale
+```
+
+Если в tailnet роутер offline, проверьте orphan `sing-box`:
+
+```sh
+pgrep -af sing-box || echo "NO sing-box process"
+```
+
+Восстановление:
+
+```sh
+killall sing-box
+/etc/init.d/tailscale restart
+tailscale status
+tailscale netcheck
+tailscale ip -4
+```
+
+Если `tailscale status` или `logread` показывает ошибки coordination server, не запускайте Podkop обратно до проверки routing exclusions:
+
+```sh
+logread | grep -i tailscale | tail -n 120
+/etc/init.d/podkop status
+pgrep -af sing-box || echo "NO sing-box process"
+```
+
+---
+
+## Если LuCI показывает Forbidden через Tailscale
+
+Если `http://100.x.x.x/` возвращает:
+
+```text
+Forbidden
+Rejected request from RFC1918 IP to public server address
+```
+
+Отключите только uhttpd RFC1918 filter. WAN-порты при этом не открываются:
+
+```sh
+cp /etc/config/uhttpd /etc/config/uhttpd.backup-tailscale-$(date +%Y%m%d-%H%M%S)
+uci set uhttpd.main.rfc1918_filter='0'
+uci commit uhttpd
+/etc/init.d/uhttpd restart
 ```
 
 ---
@@ -303,7 +396,7 @@ sh /tmp/remote.sh
 ## Быстрая команда с auth key и именем роутера
 
 ```sh
-TAILSCALE_AUTHKEY='tskey-auth-XXXX' \
+TAILSCALE_AUTHKEY='TS_AUTH_KEY_PLACEHOLDER' \
 TAILSCALE_HOSTNAME='nanopi-r3s-home' \
 sh -c '
 wget -O /tmp/remote.sh https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/install-remote-access-tailscale.sh &&

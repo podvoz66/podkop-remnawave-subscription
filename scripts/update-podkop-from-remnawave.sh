@@ -146,6 +146,58 @@ write_urltest_section() {
   echo "set ${UCI_CFG}.${sec}.urltest_testing_url='https://www.gstatic.com/generate_204'"
 }
 
+restart_podkop_safely() {
+  echo "[INFO] Restarting Podkop safely..."
+
+  /etc/init.d/podkop stop || true
+  sleep 3
+
+  # A stale sing-box process can survive a Podkop stop and keep old transparent
+  # proxy/routing state active, which may also disturb Tailscale controlplane access.
+  if pgrep -x sing-box >/dev/null 2>&1; then
+    echo "[WARN] sing-box remained after Podkop stop. Killing stale process..."
+    killall sing-box || true
+    sleep 2
+  fi
+
+  if pgrep -x sing-box >/dev/null 2>&1; then
+    echo "[ERROR] Old sing-box process is still running. Refusing to start Podkop."
+    pgrep -af sing-box || true
+    exit 1
+  fi
+
+  /etc/init.d/podkop start
+  sleep 5
+
+  if pgrep -af sing-box >/dev/null 2>&1; then
+    echo "[OK] sing-box is running."
+  else
+    echo "[WARN] sing-box process was not found after Podkop start."
+    echo "[WARN] Check:"
+    echo "logread | grep -iE 'podkop|sing-box|error|failed|fatal|panic' | tail -n 120"
+  fi
+}
+
+check_tailscale_after_podkop() {
+  if ! command -v tailscale >/dev/null 2>&1; then
+    return 0
+  fi
+
+  ts_status="$(tailscale status 2>/dev/null || true)"
+
+  if [ -z "$ts_status" ]; then
+    echo "[WARN] tailscale is installed but status output is empty."
+    return 0
+  fi
+
+  if printf '%s\n' "$ts_status" | grep -qiE 'offline|coordination server|health.*warn|unable to connect'; then
+    echo "[WARN] Tailscale may be unhealthy after Podkop restart."
+    echo "[WARN] Check: tailscale status; tailscale netcheck; logread | grep -i tailscale | tail -n 120"
+  else
+    echo "[OK] Tailscale status does not report offline/coordination warnings."
+  fi
+}
+
 echo "[INFO] Downloading Remnawave subscription..."
 
 curl -fsSL \
@@ -271,17 +323,7 @@ fi
 
 uci -q batch < "$TMP_UCI"
 
-echo "[INFO] Restarting Podkop..."
-/etc/init.d/podkop restart
-
-sleep 10
-
-if pgrep -af sing-box >/dev/null 2>&1; then
-  echo "[OK] sing-box is running."
-else
-  echo "[WARN] sing-box process was not found after restart."
-  echo "[WARN] Check:"
-  echo "logread | grep -iE 'podkop|sing-box|error|failed|fatal|panic' | tail -n 120"
-fi
+restart_podkop_safely
+check_tailscale_after_podkop
 
 echo "[OK] Podkop updated from Remnawave subscription."

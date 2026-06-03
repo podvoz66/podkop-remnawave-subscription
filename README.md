@@ -44,6 +44,70 @@ examples/subscription.conf.example        Example config file
 
 ## Quick Start
 
+### One-command OpenWrt bootstrap
+
+Use this option for a new router or an existing OpenWrt router where you want one script to detect the current state, install missing components, configure Tailscale remote access, enable LuCI over Tailscale, install or keep Podkop, and import the Remnawave router subscription.
+
+```sh
+wget -O /tmp/bootstrap-openwrt-router.sh \
+  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/bootstrap-openwrt-router.sh
+
+chmod +x /tmp/bootstrap-openwrt-router.sh
+
+ROUTER_NAME='openwrt-router' \
+SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
+  /tmp/bootstrap-openwrt-router.sh
+```
+
+For unattended Tailscale enrollment, pass an auth key through the environment. Do not commit a real key:
+
+```sh
+TAILSCALE_AUTHKEY='TS_AUTH_KEY_PLACEHOLDER' \
+ROUTER_NAME='openwrt-router' \
+SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
+  /tmp/bootstrap-openwrt-router.sh
+```
+
+Useful toggles:
+
+```sh
+INSTALL_RU_LOCALE=0       # skip Russian LuCI locale packages
+INSTALL_TTYD=0            # skip ttyd/luci-app-ttyd
+INSTALL_PODKOP=0          # do not install Podkop if missing
+ENABLE_LUCI_TAILSCALE=0   # do not change uhttpd rfc1918_filter
+DRY_RUN=1                 # print intended actions
+```
+
+If `SUB_URL` is omitted, bootstrap still configures the router and Tailscale, then skips subscription import with a warning.
+
+Recovery for offline Tailscale:
+
+```sh
+pgrep -af sing-box || echo "NO sing-box process"
+killall sing-box
+/etc/init.d/tailscale restart
+tailscale status
+tailscale netcheck
+```
+
+Recovery for orphan sing-box before restarting Podkop:
+
+```sh
+/etc/init.d/podkop stop
+killall sing-box
+/etc/init.d/podkop start
+```
+
+Recovery for LuCI `Forbidden` over Tailscale:
+
+```sh
+uci set uhttpd.main.rfc1918_filter='0'
+uci commit uhttpd
+/etc/init.d/uhttpd restart
+```
+
+The bootstrap script never opens WAN ports. SSH and LuCI access are expected through the Tailscale IPv4 address.
+
 ### 1. New OpenWrt Router
 
 Use this option when Podkop is not installed yet or the router is being configured from scratch.
@@ -144,6 +208,53 @@ Verify:
 ```sh
 nslookup sub.example.com
 ```
+
+## Remote access via Tailscale on OpenWrt
+
+Install remote access without opening SSH, LuCI, or any other WAN ports:
+
+```sh
+wget -O /tmp/install-remote-access-tailscale.sh \
+  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/install-remote-access-tailscale.sh
+
+chmod +x /tmp/install-remote-access-tailscale.sh
+
+TAILSCALE_HOSTNAME='openwrt-router' \
+  /tmp/install-remote-access-tailscale.sh
+```
+
+For unattended setup, pass an auth key through the environment. Do not commit or paste a real key into GitHub:
+
+```sh
+TAILSCALE_AUTHKEY='TS_AUTH_KEY_PLACEHOLDER' \
+TAILSCALE_HOSTNAME='openwrt-router' \
+  /tmp/install-remote-access-tailscale.sh
+```
+
+If the router appears offline in Tailscale, check for an orphan sing-box process:
+
+```sh
+pgrep -af sing-box || echo "NO sing-box process"
+```
+
+Recovery:
+
+```sh
+killall sing-box
+/etc/init.d/tailscale restart
+tailscale status
+tailscale ip -4
+```
+
+If LuCI over `http://100.x.x.x/` returns `Forbidden` with an RFC1918/public-address warning:
+
+```sh
+uci set uhttpd.main.rfc1918_filter='0'
+uci commit uhttpd
+/etc/init.d/uhttpd restart
+```
+
+The installer does not open WAN ports. Access is expected only through the Tailscale IPv4 address.
 
 ## Security note
 
