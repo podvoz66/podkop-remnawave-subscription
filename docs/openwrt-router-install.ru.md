@@ -40,15 +40,18 @@ https://github.com/podvoz66/podkop-remnawave-subscription
 
 
 
-Рекомендуемый тип подписки для роутера:
+Поддерживаемые схемы подписки для роутера:
 
 
 
 \* VLESS TCP REALITY;
+\* Shadowsocks;
+\* Trojan;
+\* Hysteria2 / HY2;
 
 \* direct/router nodes;
 
-\* без mobile/XHTTP/SS, если они не нужны именно этому роутеру.
+\* без mobile/XHTTP, если они не нужны именно этому роутеру.
 
 
 
@@ -294,9 +297,11 @@ Updater:
 
 \* скачивает Remnawave subscription;
 
-\* извлекает VLESS links;
+\* извлекает `vless://`, `ss://`, `trojan://`, `hysteria2://`, `hy2://` links;
 
-\* добавляет `spx=%2F` для Reality-ссылок, если его нет;
+\* добавляет `spx=%2F` только для VLESS Reality-ссылок, если его нет;
+
+\* не меняет Shadowsocks, Trojan, Hysteria2 и HY2 links;
 
 \* помечает управляемые ссылки суффиксом `-rwsub`;
 
@@ -754,7 +759,7 @@ Installer и updater делают backup в:
 
 
 
-Не добавлять реальные subscription URL, tokens, UUID, VLESS-ссылки и ключи в GitHub.
+Не добавлять реальные subscription URL, tokens, UUID, proxy-ссылки и ключи в GitHub.
 
 
 

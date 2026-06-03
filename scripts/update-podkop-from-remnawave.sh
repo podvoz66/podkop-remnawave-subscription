@@ -20,6 +20,7 @@ UCI_CFG='podkop'
 MAIN_SEC='main'
 USA_SEC='USA'
 MANAGED_SUFFIX='-rwsub'
+LINK_SCHEMES='(vless|ss|trojan|hysteria2|hy2)'
 
 UA='Podkop-OpenWrt/1.0'
 TIMEOUT='25'
@@ -55,7 +56,7 @@ ensure_section() {
 
 normalize_links() {
   # Add Reality spiderX parameter only to VLESS Reality links.
-  # Shadowsocks links must remain unchanged.
+  # Non-VLESS links must remain unchanged.
   sed '/^vless:\/\// { /security=reality/ { /[?&]spx=/! s/#/\&spx=%2F#/; } }'
 }
 
@@ -95,7 +96,7 @@ collect_manual_links() {
 
   uci -q get "${UCI_CFG}.${sec}.urltest_proxy_links" 2>/dev/null \
     | tr ' ' '\n' \
-    | grep -E '^(vless|ss)://' \
+    | grep -E "^${LINK_SCHEMES}://" \
     | while IFS= read -r link; do
         [ -n "$link" ] || continue
 
@@ -155,13 +156,13 @@ curl -fsSL \
   "$SUB_URL" \
   -o "$TMP_SUB"
 
-if grep -Eq '(vless|ss)://' "$TMP_SUB"; then
+if grep -Eq "${LINK_SCHEMES}://" "$TMP_SUB"; then
   cp "$TMP_SUB" "$TMP_TXT"
 else
   if base64 -d "$TMP_SUB" > "$TMP_TXT" 2>/dev/null; then
     :
   else
-    echo "[ERROR] Cannot decode subscription as base64 and no vless:// or ss:// found."
+    echo "[ERROR] Cannot decode subscription as base64 and no supported proxy links found."
     echo "[DEBUG] First 300 bytes:"
     head -c 300 "$TMP_SUB" | sed 's/[^[:print:]\t]/?/g'
     echo
@@ -169,12 +170,12 @@ else
   fi
 fi
 
-grep -Eo '(vless|ss)://[^[:space:]]+' "$TMP_TXT" \
+grep -Eo "${LINK_SCHEMES}://[^[:space:]]+" "$TMP_TXT" \
   | normalize_links \
   > "$TMP_ALL" || true
 
 if [ ! -s "$TMP_ALL" ]; then
-  echo "[ERROR] No vless:// or ss:// links found in subscription."
+  echo "[ERROR] No supported proxy links found in subscription."
   exit 1
 fi
 
@@ -204,12 +205,16 @@ fi
 ALL_COUNT="$(wc -l < "$TMP_ALL" | tr -d ' ')"
 VLESS_COUNT="$(grep -c '^vless://' "$TMP_ALL" 2>/dev/null || true)"
 SS_COUNT="$(grep -c '^ss://' "$TMP_ALL" 2>/dev/null || true)"
+TROJAN_COUNT="$(grep -c '^trojan://' "$TMP_ALL" 2>/dev/null || true)"
+HY2_COUNT="$(grep -cE '^(hysteria2|hy2)://' "$TMP_ALL" 2>/dev/null || true)"
 MAIN_RW_COUNT="$(wc -l < "$TMP_MAIN_SRC" | tr -d ' ')"
 USA_RW_COUNT="$(wc -l < "$TMP_USA_SRC" | tr -d ' ')"
 
-echo "[INFO] Found proxy links total: $ALL_COUNT"
+echo "[INFO] Found subscription links total: $ALL_COUNT"
 echo "[INFO] Found VLESS links: $VLESS_COUNT"
 echo "[INFO] Found Shadowsocks links: $SS_COUNT"
+echo "[INFO] Found Trojan links: $TROJAN_COUNT"
+echo "[INFO] Found Hysteria2 links: $HY2_COUNT"
 echo "[INFO] USA section exists: $USA_EXISTS"
 echo "[INFO] Remnawave links for main: $MAIN_RW_COUNT"
 echo "[INFO] Remnawave links for USA: $USA_RW_COUNT"

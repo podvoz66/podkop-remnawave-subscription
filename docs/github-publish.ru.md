@@ -22,7 +22,7 @@ git push -u origin main
 
 ```sh
 grep -R "SUB_URL='https://" .
-grep -R "vless://" .
+grep -RniE 'vless://|ss://|trojan://|hysteria2://|hy2://' .
 ```
 
 В репозитории должен быть только пример:

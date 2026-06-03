@@ -1,13 +1,14 @@
 # Podkop Remnawave Subscription Updater
 
-Скрипт для OpenWrt, который берёт router-подписку Remnawave и автоматически подставляет VLESS REALITY ссылки в секции Podkop URLTest.
+Скрипт для OpenWrt, который берёт router-подписку Remnawave и автоматически подставляет поддерживаемые proxy-ссылки в секции Podkop URLTest.
 
 Что делает:
 
 - скачивает Remnawave subscription;
 - декодирует base64, если подписка отдана в base64;
-- извлекает `vless://` ссылки;
-- добавляет `spx=%2F` в REALITY-ссылки, если Remnawave его не добавил;
+- извлекает `vless://`, `ss://`, `trojan://`, `hysteria2://`, `hy2://` ссылки;
+- добавляет `spx=%2F` только в VLESS REALITY-ссылки, если Remnawave его не добавил;
+- не меняет `ss://`, `trojan://`, `hysteria2://`, `hy2://` ссылки;
 - раскладывает ссылки по секциям Podkop:
   - `main` = все ссылки, кроме US;
   - `USA` = только `us-direct-reality`;
@@ -52,11 +53,21 @@ chmod +x /usr/bin/update-podkop-from-remnawave.sh
 Ожидаемый вывод:
 
 ```text
-[INFO] Found VLESS links total: 4
-[INFO] main links: 3
-[INFO] USA links: 1
+[INFO] Found subscription links total: 8
+[INFO] Remnawave links for main: 7
+[INFO] Remnawave links for USA: 1
 [OK] sing-box is running.
 [OK] Podkop updated from Remnawave subscription.
+```
+
+Поддерживаемые схемы:
+
+```text
+vless://
+ss://
+trojan://
+hysteria2://
+hy2://
 ```
 
 Проверить секции:
@@ -107,4 +118,8 @@ nslookup sub.example.com
 
 ## Важно по безопасности
 
-Не коммить реальные subscription token, UUID, приватные ключи и полные `vless://` ссылки в GitHub. В репозитории должен быть только `subscription.conf.example`, а реальный `/etc/podkop-remnawave/subscription.conf` хранится только на роутере.
+Не коммить реальные subscription token, UUID, приватные ключи и полные proxy-ссылки в GitHub. В репозитории должен быть только `subscription.conf.example`, а реальный `/etc/podkop-remnawave/subscription.conf` хранится только на роутере.
+
+## Changelog
+
+Updater now preserves and imports Trojan and Hysteria2 links from Remnawave/converter subscriptions.

@@ -6,6 +6,7 @@ CONF="$APP_DIR/subscription.conf"
 UPDATER="/usr/bin/update-podkop-from-remnawave.sh"
 LOG="/tmp/podkop-sub-update.log"
 CRON_LINE="0 */4 * * * /usr/bin/update-podkop-from-remnawave.sh >/tmp/podkop-sub-update.log 2>&1"
+LINK_SCHEMES='(vless|ss|trojan|hysteria2|hy2)'
 
 REPO_UPDATER_URL="https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/update-podkop-from-remnawave.sh"
 PODKOP_INSTALL_URL="https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh"
@@ -108,7 +109,7 @@ validate_subscription_before_apply() {
     wget -O "$tmp" "$url"
   fi
 
-  if grep -Eq '(vless|ss)://' "$tmp"; then
+  if grep -Eq "${LINK_SCHEMES}://" "$tmp"; then
     cp "$tmp" "$txt"
   else
     if base64 -d "$tmp" > "$txt" 2>/dev/null; then
@@ -131,16 +132,18 @@ validate_subscription_before_apply() {
     exit 1
   fi
 
-  grep -Eo '(vless|ss)://[^[:space:]]+' "$txt" > /tmp/remnawave-links-validate.$$ || true
+  grep -Eo "${LINK_SCHEMES}://[^[:space:]]+" "$txt" > /tmp/remnawave-links-validate.$$ || true
 
   LINK_COUNT="$(wc -l < /tmp/remnawave-links-validate.$$ | tr -d ' ')"
   VLESS_COUNT="$(grep -c '^vless://' /tmp/remnawave-links-validate.$$ 2>/dev/null || true)"
   SS_COUNT="$(grep -c '^ss://' /tmp/remnawave-links-validate.$$ 2>/dev/null || true)"
+  TROJAN_COUNT="$(grep -c '^trojan://' /tmp/remnawave-links-validate.$$ 2>/dev/null || true)"
+  HY2_COUNT="$(grep -cE '^(hysteria2|hy2)://' /tmp/remnawave-links-validate.$$ 2>/dev/null || true)"
 
   rm -f "$tmp" "$txt" /tmp/remnawave-links-validate.$$
 
   if [ "$LINK_COUNT" -lt 1 ]; then
-    echo "[ERROR] Subscription contains no vless:// or ss:// links."
+    echo "[ERROR] Subscription contains no supported proxy links."
     exit 1
   fi
 
@@ -148,6 +151,8 @@ validate_subscription_before_apply() {
   echo "[INFO] Total links: $LINK_COUNT"
   echo "[INFO] VLESS links: $VLESS_COUNT"
   echo "[INFO] Shadowsocks links: $SS_COUNT"
+  echo "[INFO] Trojan links: $TROJAN_COUNT"
+  echo "[INFO] Hysteria2 links: $HY2_COUNT"
 }
 
 run_podkop_installer_non_interactive() {
@@ -327,7 +332,7 @@ uci show podkop.USA 2>/dev/null | grep 'urltest_proxy_links' || true
 
 echo
 echo "[INFO] Managed links summary:"
-uci show podkop.main 2>/dev/null | grep 'urltest_proxy_links' | sed 's/ /\n/g' | grep -E 'vless://|ss://' || true
+uci show podkop.main 2>/dev/null | grep 'urltest_proxy_links' | sed 's/ /\n/g' | grep -E "${LINK_SCHEMES}://" || true
 
 echo
 echo "[INFO] cron:"

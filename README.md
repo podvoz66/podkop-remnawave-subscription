@@ -2,16 +2,26 @@
 
 OpenWrt helper for importing a Remnawave router subscription into Podkop URLTest sections.
 
-It downloads a Remnawave subscription, extracts `vless://` links, normalizes REALITY links for Podkop/sing-box by adding `spx=%2F` when missing, and writes links into separate Podkop sections:
+It downloads a Remnawave subscription, extracts supported proxy links, normalizes VLESS REALITY links for Podkop/sing-box by adding `spx=%2F` when missing, and writes links into separate Podkop sections.
 
-- `main`: all non-US VLESS REALITY links
-- `USA`: only US VLESS REALITY links
+Supported schemes:
+
+```text
+vless://
+ss://
+trojan://
+hysteria2://
+hy2://
+```
+
+- `main`: all non-US supported proxy links
+- `USA`: only US supported proxy links
 
 The script then restarts Podkop so sing-box regenerates its config.
 
 ## What problem it solves
 
-Podkop can work with individual VLESS links in `urltest_proxy_links`, but Remnawave provides a subscription. This script bridges the gap:
+Podkop can work with individual proxy links in `urltest_proxy_links`, but Remnawave provides a subscription. This script bridges the gap:
 
 ```text
 Remnawave subscription
@@ -23,6 +33,7 @@ Remnawave subscription
 ```
 
 It also handles a practical compatibility issue where Remnawave VLESS REALITY links may omit `spx=%2F`, while AutoXray-style links include it.
+Only VLESS REALITY links are normalized; Shadowsocks, Trojan, Hysteria2, and HY2 links are left unchanged.
 
 ## Files
 
@@ -104,4 +115,8 @@ nslookup sub.example.com
 
 ## Security note
 
-Do not commit real subscription tokens, UUIDs, private keys, or full VLESS links to GitHub. Use `subscription.conf.example` as a template and keep `/etc/podkop-remnawave/subscription.conf` only on the router.
+Do not commit real subscription tokens, UUIDs, private keys, or full proxy links to GitHub. Use `subscription.conf.example` as a template and keep `/etc/podkop-remnawave/subscription.conf` only on the router.
+
+## Changelog
+
+Updater now preserves and imports Trojan and Hysteria2 links from Remnawave/converter subscriptions.
