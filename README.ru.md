@@ -142,6 +142,7 @@ INTERACTIVE=0             # не задавать вопросы при стар
 INSTALL_RU_LOCALE=0       # не ставить русскую локализацию LuCI
 INSTALL_TTYD=0            # не ставить ttyd/luci-app-ttyd
 INSTALL_PODKOP=0          # не ставить Podkop, если он отсутствует
+UPDATE_PODKOP=0           # не обновлять уже установленный Podkop
 ENABLE_LUCI_TAILSCALE=0   # не менять uhttpd rfc1918_filter
 DRY_RUN=1                 # показать действия без применения
 ```

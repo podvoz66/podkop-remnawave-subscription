@@ -184,6 +184,7 @@ INTERACTIVE=0             # do not ask startup questions
 INSTALL_RU_LOCALE=0       # skip Russian LuCI locale packages
 INSTALL_TTYD=0            # skip ttyd/luci-app-ttyd
 INSTALL_PODKOP=0          # do not install Podkop if missing
+UPDATE_PODKOP=0           # do not update already installed Podkop
 ENABLE_LUCI_TAILSCALE=0   # do not configure direct LuCI/SSH access through Tailscale
 DRY_RUN=1                 # print intended actions
 ```
