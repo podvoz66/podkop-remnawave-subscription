@@ -31,6 +31,29 @@ Remnawave subscription
 
 Рекомендуемый вариант для нового или уже используемого OpenWrt-роутера: один скрипт определяет текущее состояние, ставит недостающие компоненты, настраивает Tailscale remote access, включает LuCI через Tailscale, устанавливает или сохраняет Podkop и импортирует router-подписку Remnawave.
 
+### Интерактивный запуск
+
+Используйте этот вариант, если хотите, чтобы скрипт сам спросил имя роутера, Tailscale auth key и ссылку Remnawave subscription.
+
+```sh
+wget -O /tmp/bootstrap-openwrt-router.sh \
+  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/bootstrap-openwrt-router.sh
+
+chmod +x /tmp/bootstrap-openwrt-router.sh
+
+/tmp/bootstrap-openwrt-router.sh
+```
+
+В этом варианте появится вопрос:
+
+```text
+Enter Router/device name / Введите имя роутера:
+```
+
+### Запуск с заранее заданным именем роутера
+
+Используйте этот вариант, если имя роутера нужно передать заранее. В этом случае вопрос `Enter Router/device name` не появится.
+
 ```sh
 wget -O /tmp/bootstrap-openwrt-router.sh \
   https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/bootstrap-openwrt-router.sh
