@@ -364,6 +364,46 @@ uci commit uhttpd
 
 Скрипт не открывает WAN-порты. Доступ должен идти только через Tailscale IPv4.
 
+## Прямой доступ к LuCI через Tailscale
+
+Bootstrap и скрипт удалённого доступа настраивают прямой доступ к самому роутеру из Tailnet:
+
+```text
+LuCI: http://ROUTER_TAILSCALE_IP/
+SSH:  ssh root@ROUTER_TAILSCALE_IP
+```
+
+Для этого используется helper:
+
+```text
+scripts/install-tailscale-direct-access.sh
+```
+
+Он делает backup `/etc/config/firewall` и `/etc/config/uhttpd`, включает автозапуск `tailscale`, `dropbear` и `uhttpd`, отключает `uhttpd.main.rfc1918_filter`, а затем добавляет только input-правила для Tailnet:
+
+```text
+Allow-SSH-from-Tailscale:  100.64.0.0/10 -> tcp/22
+Allow-LuCI-from-Tailscale: 100.64.0.0/10 -> tcp/80,443
+```
+
+WAN-порты не открываются, port forwarding не создаётся.
+
+Если нужно отключить эту настройку:
+
+```sh
+ENABLE_LUCI_TAILSCALE=0 ROUTER_NAME='my-router' /tmp/bootstrap-openwrt-router.sh
+```
+
+Проверка с ноутбука после bootstrap и перезагрузки:
+
+```powershell
+& "C:\Program Files\Tailscale\tailscale.exe" ping ROUTER_TAILSCALE_IP
+curl.exe -I http://ROUTER_TAILSCALE_IP
+ssh root@ROUTER_TAILSCALE_IP
+```
+
+Сразу после перезагрузки `tailscale ping` может несколько секунд отвечать timeout, пока `tailscaled` поднимается. После появления `pong` LuCI и SSH должны отвечать напрямую через Tailscale IP.
+
 ## Важно по безопасности
 
 Не коммить реальные subscription token, UUID, приватные ключи и полные proxy-ссылки в GitHub. В репозитории должен быть только `subscription.conf.example`, а реальный `/etc/podkop-remnawave/subscription.conf` хранится только на роутере.

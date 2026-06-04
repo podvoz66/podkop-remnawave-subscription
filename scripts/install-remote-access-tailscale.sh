@@ -130,28 +130,31 @@ stop_orphan_singbox_for_tailscale() {
 
 configure_luci_tailscale_access() {
   if [ "${ENABLE_LUCI_TAILSCALE:-1}" != "1" ]; then
-    echo "[INFO] ENABLE_LUCI_TAILSCALE is not 1. Skipping LuCI/uhttpd change."
+    echo "[INFO] ENABLE_LUCI_TAILSCALE is not 1. Skipping direct SSH/LuCI Tailscale access setup."
     return 0
   fi
-
-  if [ ! -f /etc/config/uhttpd ]; then
-    echo "[WARN] /etc/config/uhttpd not found. Skipping LuCI/uhttpd change."
-    return 0
-  fi
-
-  stamp="$(date +%Y%m%d-%H%M%S)"
-  backup="/etc/config/uhttpd.backup-tailscale-${stamp}"
 
   echo
-  echo "[STEP] Allowing LuCI access through Tailscale IP..."
-  cp /etc/config/uhttpd "$backup"
-  echo "[INFO] uhttpd backup saved: $backup"
+  echo "[STEP] Enable direct SSH/LuCI access through Tailscale"
 
-  # LuCI sees Tailscale 100.x clients as a request to a non-RFC1918 address.
-  # Disable only this uhttpd guard; do not change listen_http/listen_https or WAN firewall.
-  uci set uhttpd.main.rfc1918_filter='0'
-  uci commit uhttpd
-  /etc/init.d/uhttpd restart || true
+  helper="/tmp/install-tailscale-direct-access.sh"
+  repo_raw_base="${REPO_RAW_BASE:-https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main}"
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL --connect-timeout 25 --max-time 60 \
+      "$repo_raw_base/scripts/install-tailscale-direct-access.sh" \
+      -o "$helper"
+  else
+    wget -O "$helper" \
+      "$repo_raw_base/scripts/install-tailscale-direct-access.sh"
+  fi
+
+  chmod +x "$helper"
+
+  ENABLE_TAILSCALE_SSH_DIRECT="${ENABLE_TAILSCALE_SSH_DIRECT:-1}" \
+  ENABLE_TAILSCALE_LUCI_DIRECT="${ENABLE_TAILSCALE_LUCI_DIRECT:-1}" \
+  TAILSCALE_ALLOWED_CIDR="${TAILSCALE_ALLOWED_CIDR:-100.64.0.0/10}" \
+    sh "$helper"
 }
 
 tailscale_status_safe() {

@@ -832,24 +832,27 @@ stop_orphan_singbox_for_tailscale() {
 }
 
 configure_luci_tailscale_access() {
-  if [ "$ENABLE_LUCI_TAILSCALE" != "1" ]; then
-    info "ENABLE_LUCI_TAILSCALE=0. Skipping LuCI/uhttpd change."
+  if [ "${ENABLE_LUCI_TAILSCALE:-1}" != "1" ]; then
+    info "ENABLE_LUCI_TAILSCALE=0. Skipping direct LuCI/Tailscale access setup."
     return 0
   fi
 
-  if [ ! -f /etc/config/uhttpd ]; then
-    warn "/etc/config/uhttpd not found. Skipping LuCI/uhttpd change."
+  step "Enable direct SSH/LuCI access through Tailscale"
+
+  helper="/tmp/install-tailscale-direct-access.sh"
+
+  if is_dry_run; then
+    echo "[DRY_RUN] fetch and run scripts/install-tailscale-direct-access.sh"
     return 0
   fi
 
-  step "Enable LuCI access through Tailscale IP"
+  fetch "$REPO_RAW_BASE/scripts/install-tailscale-direct-access.sh" "$helper"
+  chmod +x "$helper"
 
-  run_cmd uci set uhttpd.main.rfc1918_filter='0'
-  run_cmd uci commit uhttpd
-
-  if [ -x /etc/init.d/uhttpd ]; then
-    run_cmd /etc/init.d/uhttpd restart || true
-  fi
+  ENABLE_TAILSCALE_SSH_DIRECT="${ENABLE_TAILSCALE_SSH_DIRECT:-1}" \
+  ENABLE_TAILSCALE_LUCI_DIRECT="${ENABLE_TAILSCALE_LUCI_DIRECT:-1}" \
+  TAILSCALE_ALLOWED_CIDR="${TAILSCALE_ALLOWED_CIDR:-100.64.0.0/10}" \
+    sh "$helper"
 }
 
 tailscale_diagnostics() {
