@@ -1,7 +1,7 @@
 ## Language / Язык
 
-- [English](#english)
-- [Русский](#русский)
+* [English](#english)
+* [Русский](#русский)
 
 # English
 
@@ -21,8 +21,8 @@ hysteria2://
 hy2://
 ```
 
-- `main`: all non-US supported proxy links
-- `USA`: only US supported proxy links
+* `main`: all non-US supported proxy links
+* `USA`: only US supported proxy links
 
 The script then restarts Podkop so sing-box regenerates its config.
 
@@ -57,15 +57,36 @@ Use this option for one-command OpenWrt router setup on a new router or an exist
 
 Bootstrap:
 
-- detects OpenWrt version and router state;
-- installs/checks required packages;
-- configures Tailscale remote access;
-- configures LuCI access through Tailscale;
-- installs/checks Podkop;
-- installs Remnawave subscription updater;
-- imports or reuses saved Remnawave subscription;
-- creates backups;
-- does not open WAN ports.
+* detects OpenWrt version and router state;
+* installs/checks required packages;
+* configures Tailscale remote access;
+* configures LuCI access through Tailscale;
+* installs/checks Podkop;
+* installs Remnawave subscription updater;
+* imports or reuses saved Remnawave subscription;
+* creates backups;
+* does not open WAN ports.
+
+### Interactive launch
+
+Use this variant if you want the script to ask for router name, Tailscale auth key, and Remnawave subscription URL.
+
+```sh
+wget -O /tmp/bootstrap.sh \
+  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/bootstrap-openwrt-router.sh && \
+chmod +x /tmp/bootstrap.sh && \
+/tmp/bootstrap.sh
+```
+
+This variant will show:
+
+```text
+Enter Router/device name / Введите имя роутера:
+```
+
+### Launch with predefined router name
+
+Use this variant if you want to pass the router name in advance. In this case, the `Enter Router/device name` prompt will not appear.
 
 ```sh
 wget -O /tmp/bootstrap.sh \
@@ -133,7 +154,7 @@ INTERACTIVE=0 \
 TAILSCALE_AUTHKEY='TS_AUTH_KEY_PLACEHOLDER' \
 ROUTER_NAME='openwrt-router' \
 SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
-  /tmp/bootstrap-openwrt-router.sh
+  /tmp/bootstrap.sh
 ```
 
 To avoid changing the OpenWrt system hostname:
@@ -143,7 +164,7 @@ INTERACTIVE=0 \
 TAILSCALE_AUTHKEY='TS_AUTH_KEY_PLACEHOLDER' \
 ROUTER_NAME='openwrt-router' \
 SET_OPENWRT_HOSTNAME=0 \
-  /tmp/bootstrap-openwrt-router.sh
+  /tmp/bootstrap.sh
 ```
 
 You can also run non-interactively without either value:
@@ -151,7 +172,7 @@ You can also run non-interactively without either value:
 ```sh
 INTERACTIVE=0 \
 ROUTER_NAME='openwrt-router' \
-  /tmp/bootstrap-openwrt-router.sh
+  /tmp/bootstrap.sh
 ```
 
 With `INTERACTIVE=0` and no `SUB_URL`, bootstrap reuses the saved subscription URL if one exists. With no `TAILSCALE_AUTHKEY`, it keeps existing Tailscale state or falls back to browser login.
@@ -163,7 +184,7 @@ INTERACTIVE=0             # do not ask startup questions
 INSTALL_RU_LOCALE=0       # skip Russian LuCI locale packages
 INSTALL_TTYD=0            # skip ttyd/luci-app-ttyd
 INSTALL_PODKOP=0          # do not install Podkop if missing
-ENABLE_LUCI_TAILSCALE=0   # do not change uhttpd rfc1918_filter
+ENABLE_LUCI_TAILSCALE=0   # do not configure direct LuCI/SSH access through Tailscale
 DRY_RUN=1                 # print intended actions
 ```
 
@@ -388,6 +409,46 @@ uci commit uhttpd
 
 The installer does not open WAN ports. Access is expected only through the Tailscale IPv4 address.
 
+## Direct LuCI and SSH access through Tailscale
+
+Bootstrap and the remote-access installer configure direct access to the router itself from Tailnet:
+
+```text
+LuCI: http://ROUTER_TAILSCALE_IP/
+SSH:  ssh root@ROUTER_TAILSCALE_IP
+```
+
+This is handled by:
+
+```text
+scripts/install-tailscale-direct-access.sh
+```
+
+It creates backups of `/etc/config/firewall` and `/etc/config/uhttpd`, enables autostart for `tailscale`, `dropbear`, and `uhttpd`, disables `uhttpd.main.rfc1918_filter`, and adds router-local input rules for Tailnet:
+
+```text
+Allow-SSH-from-Tailscale:  100.64.0.0/10 -> tcp/22
+Allow-LuCI-from-Tailscale: 100.64.0.0/10 -> tcp/80,443
+```
+
+WAN ports are not opened. Port forwarding is not created.
+
+To disable this behavior:
+
+```sh
+ENABLE_LUCI_TAILSCALE=0 ROUTER_NAME='my-router' /tmp/bootstrap.sh
+```
+
+Check from your laptop after bootstrap and reboot:
+
+```powershell
+& "C:\Program Files\Tailscale\tailscale.exe" ping ROUTER_TAILSCALE_IP
+curl.exe -I http://ROUTER_TAILSCALE_IP
+ssh root@ROUTER_TAILSCALE_IP
+```
+
+Immediately after reboot, `tailscale ping` may time out for a few seconds while OpenWrt starts the network and `tailscaled`. After `pong`, LuCI and SSH should answer directly through the Tailscale IP.
+
 ## Security note
 
 Do not commit real subscription tokens, UUIDs, private keys, or full proxy links to GitHub. Use `subscription.conf.example` as a template and keep `/etc/podkop-remnawave/subscription.conf` only on the router.
@@ -408,15 +469,36 @@ Updater now preserves and imports Trojan and Hysteria2 links from Remnawave/conv
 
 Bootstrap:
 
-- определяет версию OpenWrt и состояние роутера;
-- устанавливает/проверяет нужные пакеты;
-- настраивает удалённый доступ через Tailscale;
-- настраивает доступ к LuCI через Tailscale;
-- устанавливает/проверяет Podkop;
-- устанавливает Remnawave subscription updater;
-- импортирует или переиспользует сохранённую Remnawave-подписку;
-- создаёт backup;
-- не открывает WAN-порты.
+* определяет версию OpenWrt и состояние роутера;
+* устанавливает/проверяет нужные пакеты;
+* настраивает удалённый доступ через Tailscale;
+* настраивает доступ к LuCI через Tailscale;
+* устанавливает/проверяет Podkop;
+* устанавливает Remnawave subscription updater;
+* импортирует или переиспользует сохранённую Remnawave-подписку;
+* создаёт backup;
+* не открывает WAN-порты.
+
+### Интерактивный запуск
+
+Используйте этот вариант, если хотите, чтобы скрипт сам спросил имя роутера, Tailscale auth key и ссылку Remnawave subscription.
+
+```sh
+wget -O /tmp/bootstrap.sh \
+  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/bootstrap-openwrt-router.sh && \
+chmod +x /tmp/bootstrap.sh && \
+/tmp/bootstrap.sh
+```
+
+В этом варианте появится вопрос:
+
+```text
+Enter Router/device name / Введите имя роутера:
+```
+
+### Запуск с заранее заданным именем роутера
+
+Используйте этот вариант, если имя роутера нужно передать заранее. В этом случае вопрос `Enter Router/device name` не появится.
 
 ```sh
 wget -O /tmp/bootstrap.sh \
@@ -426,7 +508,7 @@ ROUTER_NAME='my-router' \
 /tmp/bootstrap.sh
 ```
 
-Скрипт задаёт три вопроса:
+Скрипт задаёт три вопроса, если значения не переданы через переменные окружения:
 
 ```text
 ============================================================
@@ -487,11 +569,44 @@ SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
 /tmp/bootstrap.sh
 ```
 
+Без изменения hostname самой OpenWrt-системы:
+
+```sh
+INTERACTIVE=0 \
+TAILSCALE_AUTHKEY='TS_AUTH_KEY_PLACEHOLDER' \
+ROUTER_NAME='my-router' \
+SET_OPENWRT_HOSTNAME=0 \
+/tmp/bootstrap.sh
+```
+
+Можно также запустить non-interactive без этих значений:
+
+```sh
+INTERACTIVE=0 \
+ROUTER_NAME='my-router' \
+/tmp/bootstrap.sh
+```
+
+При `INTERACTIVE=0` без `SUB_URL` bootstrap использует сохранённую подписку, если она есть. Без `TAILSCALE_AUTHKEY` он сохраняет существующее состояние Tailscale или переходит к browser login.
+
+Полезные переключатели:
+
+```sh
+INTERACTIVE=0             # не задавать вопросы при старте
+INSTALL_RU_LOCALE=0       # не ставить русскую локализацию LuCI
+INSTALL_TTYD=0            # не ставить ttyd/luci-app-ttyd
+INSTALL_PODKOP=0          # не ставить Podkop, если он отсутствует
+ENABLE_LUCI_TAILSCALE=0   # не настраивать прямой доступ LuCI/SSH через Tailscale
+DRY_RUN=1                 # показать действия без применения
+```
+
+Если `SUB_URL` не задан и сохранённой подписки нет, bootstrap не падает: он настраивает роутер и Tailscale, а импорт подписки пропускает с предупреждением.
+
 Безопасность:
 
-- не добавляйте реальные subscription tokens, auth keys, UUID, private keys и полные proxy-ссылки в GitHub;
-- не открывайте SSH или LuCI в WAN;
-- используйте доступ к роутеру через Tailscale IPv4.
+* не добавляйте реальные subscription tokens, auth keys, UUID, private keys и полные proxy-ссылки в GitHub;
+* не открывайте SSH или LuCI в WAN;
+* используйте доступ к роутеру через Tailscale IPv4.
 
 ### Финальный статус и логи
 
@@ -535,3 +650,75 @@ INSTALL_TTYD=0 ROUTER_NAME='my-router' /tmp/bootstrap.sh
 ```
 
 Установка или обновление `ttyd` может оборвать текущую web-terminal-сессию. С `INSTALL_TTYD=0` критичные шаги Tailscale, Podkop и Remnawave успеют завершиться.
+
+Восстановление, если роутер offline в Tailscale:
+
+```sh
+pgrep -af sing-box || echo "NO sing-box process"
+killall sing-box
+/etc/init.d/tailscale restart
+tailscale status
+tailscale netcheck
+```
+
+Восстановление orphan `sing-box` перед запуском Podkop:
+
+```sh
+/etc/init.d/podkop stop
+killall sing-box
+/etc/init.d/podkop start
+```
+
+Если LuCI по Tailscale показывает `Forbidden`:
+
+```sh
+uci set uhttpd.main.rfc1918_filter='0'
+uci commit uhttpd
+/etc/init.d/uhttpd restart
+```
+
+Bootstrap не открывает WAN-порты. SSH и LuCI должны быть доступны через Tailscale IPv4.
+
+## Прямой доступ к LuCI через Tailscale
+
+Bootstrap и скрипт удалённого доступа настраивают прямой доступ к самому роутеру из Tailnet:
+
+```text
+LuCI: http://ROUTER_TAILSCALE_IP/
+SSH:  ssh root@ROUTER_TAILSCALE_IP
+```
+
+Для этого используется helper:
+
+```text
+scripts/install-tailscale-direct-access.sh
+```
+
+Он делает backup `/etc/config/firewall` и `/etc/config/uhttpd`, включает автозапуск `tailscale`, `dropbear` и `uhttpd`, отключает `uhttpd.main.rfc1918_filter`, а затем добавляет только input-правила для Tailnet:
+
+```text
+Allow-SSH-from-Tailscale:  100.64.0.0/10 -> tcp/22
+Allow-LuCI-from-Tailscale: 100.64.0.0/10 -> tcp/80,443
+```
+
+WAN-порты не открываются, port forwarding не создаётся.
+
+Если нужно отключить эту настройку:
+
+```sh
+ENABLE_LUCI_TAILSCALE=0 ROUTER_NAME='my-router' /tmp/bootstrap.sh
+```
+
+Проверка с ноутбука после bootstrap и перезагрузки:
+
+```powershell
+& "C:\Program Files\Tailscale\tailscale.exe" ping ROUTER_TAILSCALE_IP
+curl.exe -I http://ROUTER_TAILSCALE_IP
+ssh root@ROUTER_TAILSCALE_IP
+```
+
+Сразу после перезагрузки `tailscale ping` может несколько секунд отвечать timeout, пока `tailscaled` поднимается. После появления `pong` LuCI и SSH должны отвечать напрямую через Tailscale IP.
+
+## Changelog
+
+Updater now preserves and imports Trojan and Hysteria2 links from Remnawave/converter subscriptions.
