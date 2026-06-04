@@ -457,6 +457,25 @@ Do not commit real subscription tokens, UUIDs, private keys, or full proxy links
 
 Updater now preserves and imports Trojan and Hysteria2 links from Remnawave/converter subscriptions.
 
+
+## Podkop install/update behavior
+
+Bootstrap uses the official Podkop installer for both fresh install and update:
+
+```sh
+wget -O /tmp/podkop-install.sh https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh
+sh /tmp/podkop-install.sh
+```
+
+Behavior:
+
+- clean router without Podkop: `INSTALL_PODKOP=auto` or `INSTALL_PODKOP=1` installs Podkop through the official installer;
+- router with existing Podkop: `UPDATE_PODKOP=1` updates Podkop through the official installer;
+- router with existing Podkop where update is not wanted: `UPDATE_PODKOP=0` keeps the installed Podkop version;
+- bootstrap does not run a full `opkg upgrade`.
+
+The installer is executed in non-interactive mode and bootstrap continuously feeds `y` answers to installer prompts, including the Russian localization prompt. This preserves/installs Russian localization when the Podkop installer asks for it.
+
 # Русский
 
 ## Podkop Remnawave Subscription Updater
@@ -718,6 +737,25 @@ ssh root@ROUTER_TAILSCALE_IP
 ```
 
 Сразу после перезагрузки `tailscale ping` может несколько секунд отвечать timeout, пока `tailscaled` поднимается. После появления `pong` LuCI и SSH должны отвечать напрямую через Tailscale IP.
+
+
+## Установка и обновление Podkop через официальный installer
+
+Bootstrap использует официальный installer Podkop и для установки, и для обновления:
+
+```sh
+wget -O /tmp/podkop-install.sh https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh
+sh /tmp/podkop-install.sh
+```
+
+Поведение:
+
+- чистый роутер без Podkop: `INSTALL_PODKOP=auto` или `INSTALL_PODKOP=1` устанавливает Podkop через официальный installer;
+- роутер с уже установленным Podkop: `UPDATE_PODKOP=1` обновляет Podkop через официальный installer;
+- роутер с уже установленным Podkop, который не нужно обновлять: `UPDATE_PODKOP=0` оставляет текущую версию Podkop;
+- bootstrap не делает общий `opkg upgrade`.
+
+Installer запускается в non-interactive режиме: bootstrap постоянно подаёт ответы `y` на вопросы installer-а, включая вопрос про русскую локализацию. Это нужно, чтобы русская локализация Podkop сохранялась или устанавливалась, когда installer спрашивает об этом.
 
 ## Changelog
 

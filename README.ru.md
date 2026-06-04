@@ -431,6 +431,25 @@ ssh root@ROUTER_TAILSCALE_IP
 
 Не коммить реальные subscription token, UUID, приватные ключи и полные proxy-ссылки в GitHub. В репозитории должен быть только `subscription.conf.example`, а реальный `/etc/podkop-remnawave/subscription.conf` хранится только на роутере.
 
+
+## Установка и обновление Podkop через официальный installer
+
+Bootstrap использует официальный installer Podkop и для установки, и для обновления:
+
+```sh
+wget -O /tmp/podkop-install.sh https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh
+sh /tmp/podkop-install.sh
+```
+
+Поведение:
+
+- чистый роутер без Podkop: `INSTALL_PODKOP=auto` или `INSTALL_PODKOP=1` устанавливает Podkop через официальный installer;
+- роутер с уже установленным Podkop: `UPDATE_PODKOP=1` обновляет Podkop через официальный installer;
+- роутер с уже установленным Podkop, который не нужно обновлять: `UPDATE_PODKOP=0` оставляет текущую версию Podkop;
+- bootstrap не делает общий `opkg upgrade`.
+
+Installer запускается в non-interactive режиме: bootstrap постоянно подаёт ответы `y` на вопросы installer-а, включая вопрос про русскую локализацию. Это нужно, чтобы русская локализация Podkop сохранялась или устанавливалась, когда installer спрашивает об этом.
+
 ## Changelog
 
 Updater now preserves and imports Trojan and Hysteria2 links from Remnawave/converter subscriptions.
