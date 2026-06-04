@@ -18,6 +18,7 @@ LINK_SCHEMES='(vless|ss|trojan|hysteria2|hy2)'
 INSTALL_RU_LOCALE="${INSTALL_RU_LOCALE:-1}"
 INSTALL_TTYD="${INSTALL_TTYD:-1}"
 INSTALL_PODKOP="${INSTALL_PODKOP:-auto}"
+UPDATE_PODKOP="${UPDATE_PODKOP:-1}"
 ENABLE_LUCI_TAILSCALE="${ENABLE_LUCI_TAILSCALE:-1}"
 DRY_RUN="${DRY_RUN:-0}"
 INTERACTIVE="${INTERACTIVE:-1}"
@@ -171,6 +172,14 @@ validate_env() {
     auto|0|1) ;;
     *)
       err "INSTALL_PODKOP must be auto, 1, or 0."
+      exit 1
+      ;;
+  esac
+
+  case "$UPDATE_PODKOP" in
+    0|1) ;;
+    *)
+      err "UPDATE_PODKOP must be 1 or 0."
       exit 1
       ;;
   esac
@@ -976,16 +985,19 @@ setup_tailscale() {
 }
 
 run_podkop_installer_non_interactive() {
-  step "Install Podkop"
+  action="${1:-install}"
+  step "Run official Podkop installer for $action"
 
   if is_dry_run; then
-    echo "[DRY_RUN] fetch Podkop installer and run it with yes answers"
+    echo "[DRY_RUN] fetch Podkop installer and run it with yes answers, including Russian localization prompt"
     return 0
   fi
 
   fetch "$PODKOP_INSTALL_URL" /tmp/podkop-install.sh
   chmod +x /tmp/podkop-install.sh
 
+  # Keep feeding "y" so the official Podkop installer confirms install/update
+  # prompts and enables Russian localization when the installer asks for it.
   if command -v timeout >/dev/null 2>&1; then
     timeout 900 sh -c "while true; do printf 'y\n'; sleep 1; done | sh /tmp/podkop-install.sh"
   else
@@ -1002,10 +1014,24 @@ setup_podkop() {
   step "Configure Podkop"
 
   if [ -f /etc/config/podkop ] || [ -x /etc/init.d/podkop ]; then
-    info "Podkop appears to be installed. Keeping existing installation."
-    if [ -x /etc/init.d/podkop ]; then
-      /etc/init.d/podkop status || true
+    info "Podkop appears to be installed."
+
+    if [ "$UPDATE_PODKOP" = "1" ]; then
+      info "UPDATE_PODKOP=1. Updating Podkop via official installer."
+      if run_podkop_installer_non_interactive "update"; then
+        echo "[OK] Podkop installer finished."
+      else
+        err "Podkop installer failed during update."
+        err "Rerun with UPDATE_PODKOP=0 to keep existing Podkop, or update Podkop manually."
+        exit 1
+      fi
+    else
+      info "UPDATE_PODKOP=0. Keeping existing Podkop installation."
+      if [ -x /etc/init.d/podkop ]; then
+        /etc/init.d/podkop status || true
+      fi
     fi
+
     return 0
   fi
 
@@ -1015,8 +1041,8 @@ setup_podkop() {
       return 0
       ;;
     auto|1)
-      info "Podkop is not installed. Using documented Podkop installer."
-      if run_podkop_installer_non_interactive; then
+      info "Podkop is not installed. Using official Podkop installer."
+      if run_podkop_installer_non_interactive "install"; then
         echo "[OK] Podkop installer finished."
       else
         err "Podkop installer failed."
@@ -1180,6 +1206,7 @@ final_report() {
   log_line "Backup dir: ${BACKUP_DIR:-not-created}"
   log_line "Log file: ${LOG_FILE:-not-created}"
   log_line "INSTALL_TTYD: $INSTALL_TTYD"
+  log_line "UPDATE_PODKOP: $UPDATE_PODKOP"
   log_line "REBOOT_AFTER: $REBOOT_AFTER"
   log_line "REBOOT_DELAY: $REBOOT_DELAY"
   log_line "sing-box status: $singbox_final"
