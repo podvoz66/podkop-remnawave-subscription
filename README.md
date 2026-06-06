@@ -21,6 +21,36 @@ hysteria2://
 hy2://
 ```
 
+## Hysteria2 for router users
+
+Router users use the normal public subscription URL:
+
+```text
+https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN
+```
+
+Hysteria2 is not added directly by the default Remnawave base64 generator. It is injected infrastructure-side by the transparent converter on `sub.adeptpro.online`. Therefore, the Remnawave panel or default preview may show fewer links and may not contain `hysteria2://`. This is expected.
+
+A new router user receives one generated Stockholm Hysteria2 link automatically when:
+
+1. the user belongs to `Routers-All-Reality-Prod`;
+2. `/<token>/json` contains the `sthm-hysteria2-443` entry;
+3. the public `/<token>` subscription is fetched through `sub.adeptpro.online`.
+
+Manual per-token converter allowlist and nginx location edits are no longer required after Stage 7. The router-side updater must support `vless://`, `ss://`, `trojan://`, `hysteria2://`, and `hy2://`.
+
+Validate the public subscription rather than the panel preview:
+
+```sh
+SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN'
+
+curl -fsSL "$SUB_URL" -o /tmp/router-sub.b64
+
+base64 -d /tmp/router-sub.b64 2>/dev/null \
+  | grep -Eo '^(vless|ss|trojan|hysteria2|hy2)://' \
+  | sort | uniq -c
+```
+
 * `main`: all non-US supported proxy links
 * `USA`: only US supported proxy links
 
@@ -482,6 +512,38 @@ The installer is executed in non-interactive mode and bootstrap continuously fee
 ## Podkop Remnawave Subscription Updater
 
 Помощник для OpenWrt, который настраивает роутер для Podkop, Remnawave subscription и удалённого доступа через Tailscale.
+
+## Hysteria2 для router users
+
+Для router users используется обычная публичная subscription-ссылка:
+
+```text
+https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN
+```
+
+Для router users Hysteria2 добавляется не напрямую Remnawave default/base64 generator, а infrastructure-side transparent converter на `sub.adeptpro.online`.
+
+Поэтому в Remnawave panel/default preview может быть видно меньше ссылок и может не быть `hysteria2://`. Это нормально.
+
+Новый router user автоматически получает одну Stockholm Hysteria2-ссылку, если:
+
+1. пользователь состоит в `Routers-All-Reality-Prod`;
+2. `/<token>/json` содержит запись `sthm-hysteria2-443`;
+3. публичная `/<token>` subscription загружается через `sub.adeptpro.online`.
+
+После Stage 7 вручную добавлять token в converter allowlist и отдельный nginx location больше не требуется. Router-side updater должен поддерживать `vless://`, `ss://`, `trojan://`, `hysteria2://` и `hy2://`.
+
+Контрольная проверка выполняется не по panel preview, а по публичной subscription-ссылке:
+
+```sh
+SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN'
+
+curl -fsSL "$SUB_URL" -o /tmp/router-sub.b64
+
+base64 -d /tmp/router-sub.b64 2>/dev/null \
+  | grep -Eo '^(vless|ss|trojan|hysteria2|hy2)://' \
+  | sort | uniq -c
+```
 
 ### Быстрая установка OpenWrt router bootstrap
 

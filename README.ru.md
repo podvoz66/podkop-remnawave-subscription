@@ -25,6 +25,46 @@ Remnawave subscription
 → sing-box running
 ```
 
+## Hysteria2 для router users
+
+Для router users используется обычная публичная subscription-ссылка:
+
+```text
+https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN
+```
+
+Для router users Hysteria2 добавляется не напрямую Remnawave default/base64 generator, а infrastructure-side transparent converter на `sub.adeptpro.online`.
+
+Поэтому в Remnawave panel/default preview может быть видно меньше ссылок и может не быть `hysteria2://`. Это нормально.
+
+Новый router user автоматически получает одну Stockholm Hysteria2-ссылку, если:
+
+1. пользователь состоит в `Routers-All-Reality-Prod`;
+2. `/<token>/json` содержит запись `sthm-hysteria2-443`;
+3. публичная `/<token>` subscription загружается через `sub.adeptpro.online`.
+
+После Stage 7 вручную добавлять token в converter allowlist и отдельный nginx location больше не требуется. Router-side updater должен поддерживать:
+
+```text
+vless://
+ss://
+trojan://
+hysteria2://
+hy2://
+```
+
+Контрольная проверка выполняется не по panel preview, а по публичной subscription-ссылке:
+
+```sh
+SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN'
+
+curl -fsSL "$SUB_URL" -o /tmp/router-sub.b64
+
+base64 -d /tmp/router-sub.b64 2>/dev/null \
+  | grep -Eo '^(vless|ss|trojan|hysteria2|hy2)://' \
+  | sort | uniq -c
+```
+
 ## Быстрый запуск
 
 ### One-command OpenWrt bootstrap
