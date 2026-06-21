@@ -6,13 +6,20 @@ set -eu
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main"
 REPO_UPDATER_URL="$REPO_RAW_BASE/scripts/update-podkop-from-remnawave.sh"
+REPO_GUARD_URL="$REPO_RAW_BASE/scripts/podkop-all-lists-guard.sh"
 PODKOP_INSTALL_URL="https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh"
 
 APP_DIR="/etc/podkop-remnawave"
 CONF="$APP_DIR/subscription.conf"
 UPDATER="/usr/bin/update-podkop-from-remnawave.sh"
+GUARD_BIN="/usr/bin/podkop-all-lists-guard.sh"
+GUARD_DIR="/etc/podkop-guard"
+GUARD_CACHE_DIR="$GUARD_DIR/cache"
+GUARD_URLS="$GUARD_DIR/urls.txt"
 LOG="/tmp/podkop-sub-update.log"
 CRON_LINE="0 */4 * * * /usr/bin/update-podkop-from-remnawave.sh >/tmp/podkop-sub-update.log 2>&1"
+GUARD_APPLY_CRON="*/2 * * * * /usr/bin/podkop-all-lists-guard.sh --apply >/tmp/podkop-all-lists-guard-apply.log 2>&1"
+GUARD_REFRESH_CRON="17 */6 * * * /usr/bin/podkop-all-lists-guard.sh --refresh >/tmp/podkop-all-lists-guard-refresh.log 2>&1"
 LINK_SCHEMES='(vless|ss|trojan|hysteria2|hy2)'
 
 INSTALL_RU_LOCALE="${INSTALL_RU_LOCALE:-1}"
@@ -501,12 +508,12 @@ require_root_openwrt() {
 }
 
 pkg_detect() {
-  if command -v opkg >/dev/null 2>&1; then
-    PKG="opkg"
-  elif command -v apk >/dev/null 2>&1; then
+  if command -v apk >/dev/null 2>&1; then
     PKG="apk"
+  elif command -v opkg >/dev/null 2>&1; then
+    PKG="opkg"
   else
-    err "Neither opkg nor apk found."
+    err "Neither apk nor opkg found."
     exit 1
   fi
 }
@@ -754,13 +761,15 @@ install_dependencies() {
 
   pkg_install_one ca-bundle 0
   pkg_install_one ca-certificates 0
-
-  if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-    pkg_install_one curl 0
-  fi
+  pkg_install_one curl 0
 
   if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
     pkg_install_one wget 1
+  fi
+
+  if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+    err "Need curl or wget after dependency installation."
+    exit 1
   fi
 
   if [ -c /dev/net/tun ]; then
@@ -1058,8 +1067,85 @@ setup_podkop() {
   fi
 }
 
+write_guard_inventory_if_missing() {
+  if is_dry_run; then
+    echo "[DRY_RUN] create $GUARD_URLS with static Podkop subnet list URLs if missing"
+    return 0
+  fi
+
+  if [ ! -s "$GUARD_URLS" ]; then
+    cat > "$GUARD_URLS" <<'EOF'
+https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Subnets/IPv4/cloudflare.lst
+https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Subnets/IPv4/discord.lst
+https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Subnets/IPv4/meta.lst
+https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Subnets/IPv4/telegram.lst
+https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Subnets/IPv4/twitter.lst
+EOF
+  fi
+}
+
+ensure_guard_cron() {
+  if is_dry_run; then
+    echo "[DRY_RUN] install guard cron lines without duplicates"
+    return 0
+  fi
+
+  (
+    crontab -l 2>/dev/null | grep -v 'podkop-all-lists-guard.sh' || true
+    echo "$GUARD_APPLY_CRON"
+    echo "$GUARD_REFRESH_CRON"
+  ) | crontab -
+}
+
+check_required_runtime_commands() {
+  missing=0
+
+  for cmd in uci crontab nft sed awk grep tr wc; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      err "Required command not found: $cmd"
+      missing=1
+    fi
+  done
+
+  if [ ! -x /etc/init.d/podkop ]; then
+    err "Required service script not found: /etc/init.d/podkop"
+    missing=1
+  fi
+
+  if [ "$missing" -ne 0 ]; then
+    err "Install missing OpenWrt/Podkop components and rerun bootstrap."
+    exit 1
+  fi
+}
+
+install_subnet_guard() {
+  step "Install Podkop subnet guard"
+
+  if is_dry_run; then
+    echo "[DRY_RUN] mkdir -p $GUARD_CACHE_DIR"
+  else
+    mkdir -p "$GUARD_CACHE_DIR"
+    chmod 700 "$GUARD_DIR" "$GUARD_CACHE_DIR"
+  fi
+
+  write_guard_inventory_if_missing
+  fetch "$REPO_GUARD_URL" "$GUARD_BIN"
+  run_cmd chmod +x "$GUARD_BIN"
+  ensure_guard_cron
+
+  if is_dry_run; then
+    echo "[DRY_RUN] $GUARD_BIN --refresh || true"
+    echo "[DRY_RUN] $GUARD_BIN --apply || true"
+  else
+    "$GUARD_BIN" --refresh || true
+    "$GUARD_BIN" --apply || true
+  fi
+}
+
 install_updater_and_cron() {
   step "Install Remnawave updater"
+
+  check_required_runtime_commands
 
   if is_dry_run; then
     echo "[DRY_RUN] mkdir -p $APP_DIR"
@@ -1070,6 +1156,7 @@ install_updater_and_cron() {
 
   fetch "$REPO_UPDATER_URL" "$UPDATER"
   run_cmd chmod +x "$UPDATER"
+  install_subnet_guard
 
   if is_dry_run; then
     echo "[DRY_RUN] install cron line for update-podkop-from-remnawave.sh"

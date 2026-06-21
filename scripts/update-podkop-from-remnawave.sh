@@ -33,11 +33,43 @@ TMP_USA_SRC="/tmp/remnawave-links-usa-src.$$.list"
 TMP_MAIN_KEEP="/tmp/podkop-main-keep.$$.list"
 TMP_USA_KEEP="/tmp/podkop-usa-keep.$$.list"
 TMP_UCI="/tmp/podkop-uci.$$.batch"
+GUARD_BIN="/usr/bin/podkop-all-lists-guard.sh"
 
 cleanup() {
   rm -f "$TMP_SUB" "$TMP_TXT" "$TMP_ALL" "$TMP_MAIN_SRC" "$TMP_USA_SRC" "$TMP_MAIN_KEEP" "$TMP_USA_KEEP" "$TMP_UCI"
 }
 trap cleanup EXIT
+
+guard_available() {
+  [ -x "$GUARD_BIN" ]
+}
+
+guard_precheck() {
+  guard_available || return 0
+  echo "[SAFE-PODKOP-GUARD] Prechecking Podkop subnet lists before Podkop restart..."
+  "$GUARD_BIN" --precheck
+}
+
+guard_apply() {
+  guard_available || return 0
+  echo "[SAFE-PODKOP-GUARD] Re-applying cached subnet lists after updater..."
+  "$GUARD_BIN" --apply || true
+}
+
+ensure_guard_cron() {
+  guard_available || return 0
+
+  if ! command -v crontab >/dev/null 2>&1; then
+    echo "[WARN] crontab command not found. Cannot install Podkop subnet guard cron."
+    return 0
+  fi
+
+  (
+    crontab -l 2>/dev/null | grep -v 'podkop-all-lists-guard.sh' || true
+    echo '*/2 * * * * /usr/bin/podkop-all-lists-guard.sh --apply >/tmp/podkop-all-lists-guard-apply.log 2>&1'
+    echo '17 */6 * * * /usr/bin/podkop-all-lists-guard.sh --refresh >/tmp/podkop-all-lists-guard-refresh.log 2>&1'
+  ) | crontab - || echo "[WARN] Failed to install Podkop subnet guard cron."
+}
 
 section_exists() {
   sec="$1"
@@ -200,6 +232,16 @@ check_tailscale_after_podkop() {
 
 echo "[INFO] Downloading Remnawave subscription..."
 
+ensure_guard_cron
+
+if ! guard_precheck; then
+  echo "[SAFE-PODKOP-GUARD] Precheck failed. Refusing to update Podkop from Remnawave."
+  echo "[SAFE-PODKOP-GUARD] Subscription, UCI, backups, and Podkop restart were not changed."
+  guard_apply || true
+  ensure_guard_cron
+  exit 30
+fi
+
 curl -fsSL \
   --connect-timeout "$TIMEOUT" \
   --max-time "$TIMEOUT" \
@@ -324,6 +366,8 @@ fi
 uci -q batch < "$TMP_UCI"
 
 restart_podkop_safely
+guard_apply
+ensure_guard_cron
 check_tailscale_after_podkop
 
 echo "[OK] Podkop updated from Remnawave subscription."

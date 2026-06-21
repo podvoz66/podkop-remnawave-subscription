@@ -76,7 +76,139 @@ Only VLESS REALITY links are normalized; Shadowsocks, Trojan, Hysteria2, and HY2
 
 ```text
 scripts/update-podkop-from-remnawave.sh   Main OpenWrt script
+scripts/podkop-all-lists-guard.sh         Podkop community subnet list guard
 examples/subscription.conf.example        Example config file
+```
+
+## Compatibility
+
+Target/tested OpenWrt generations:
+
+* OpenWrt 24.10.x, usually with `opkg`;
+* OpenWrt 25.x, snapshots, and 25.12.x, which may use `apk`.
+
+Installers auto-detect the package manager:
+
+```text
+apk -> apk update && apk add curl ca-bundle
+opkg -> opkg update && opkg install curl ca-bundle
+```
+
+Runtime scripts are package-manager agnostic and do not call `apk`, `opkg`, `apk add`, or `opkg install`:
+
+```text
+scripts/update-podkop-from-remnawave.sh
+scripts/podkop-all-lists-guard.sh
+```
+
+All router scripts are POSIX `/bin/sh` and are intended for BusyBox `ash`.
+
+## Guarded updater architecture
+
+The repository installs the updater and the subnet guard as native scripts, without wrapper or `.real.sh` files:
+
+```text
+RemnaWave subscription
+→ update-podkop-from-remnawave.sh
+→ guard precheck critical subnet lists
+→ update Podkop UCI
+→ restart Podkop/sing-box
+→ guard apply cached subnets
+→ nft podkop_subnets and podkop_discord_subnets restored
+```
+
+The main components are:
+
+* `scripts/update-podkop-from-remnawave.sh`: downloads the Remnawave subscription, preserves manual links, updates Podkop UCI, restarts Podkop safely, and invokes the guard before and after the restart.
+* `scripts/podkop-all-lists-guard.sh`: downloads and caches static community subnet lists and re-applies cached CIDR entries to Podkop nft sets.
+* `examples/subscription.conf.example`: template for `/etc/podkop-remnawave/subscription.conf`.
+
+## Podkop subnet guard
+
+The guard does not manage proxy links and does not replace Podkop. It only protects Podkop community subnet lists when upstream list downloads temporarily fail during a Podkop restart.
+
+Guard behavior:
+
+* uses only static URL inventory from `/etc/podkop-guard/urls.txt`;
+* creates default inventory with Cloudflare, Discord, Meta, Telegram, and Twitter IPv4 lists if the file is missing or empty;
+* caches lists in `/etc/podkop-guard/cache`;
+* applies only `/etc/podkop-guard/cache/Subnets_IPv4_*.lst`;
+* sends `Subnets_IPv4_discord.lst` to `podkop_discord_subnets` when that set exists;
+* falls back to `podkop_subnets` for Discord if `podkop_discord_subnets` does not exist;
+* applies all other lists to `podkop_subnets`.
+
+Auto-discovery is intentionally disabled. Recursive discovery in `/tmp`, `/tmp/run`, `/var/run`, logs, lock files, sockets, or generated runtime directories is unsafe on OpenWrt. New community subnet list URLs must be added manually to `/etc/podkop-guard/urls.txt`.
+
+Guard commands:
+
+```sh
+/usr/bin/podkop-all-lists-guard.sh --precheck
+/usr/bin/podkop-all-lists-guard.sh --refresh
+/usr/bin/podkop-all-lists-guard.sh --apply
+/usr/bin/podkop-all-lists-guard.sh --status
+```
+
+Expected output examples:
+
+```text
+OK: all lists downloaded successfully
+OK: refresh completed successfully
+OK: processed cache files=5, CIDR entries attempted=...
+podkop_subnets set location: inet PodkopTable
+podkop_discord_subnets set location: inet PodkopTable
+```
+
+Guard cron jobs:
+
+```text
+*/2 * * * * /usr/bin/podkop-all-lists-guard.sh --apply >/tmp/podkop-all-lists-guard-apply.log 2>&1
+17 */6 * * * /usr/bin/podkop-all-lists-guard.sh --refresh >/tmp/podkop-all-lists-guard-refresh.log 2>&1
+```
+
+The updater cron remains unchanged:
+
+```text
+0 */4 * * * /usr/bin/update-podkop-from-remnawave.sh >/tmp/podkop-sub-update.log 2>&1
+```
+
+### Guard troubleshooting
+
+LuCI may still show old red notifications such as `Download cloudflare list failed` or `Download telegram list failed`. If `sing-box` is running, nft sets are populated, and guard `--apply` reports success, current routing can still be healthy. Old LuCI notifications can be closed in the UI.
+
+Useful checks:
+
+```sh
+service sing-box status 2>/dev/null || pgrep -af sing-box
+/usr/bin/podkop-all-lists-guard.sh --status
+nft list ruleset | grep -E 'podkop_subnets|podkop_discord_subnets|91.108.4.0/22|31.13.64.0/18|104.16.0.0/13'
+```
+
+### Guard rollback
+
+Remove guard cron lines:
+
+```sh
+(crontab -l 2>/dev/null | grep -v 'podkop-all-lists-guard.sh') | crontab -
+```
+
+Restore the old updater from a backup. Choose the correct backup manually:
+
+```sh
+ls -1 /etc/podkop-remnawave/backups/update-podkop-from-remnawave*.backup.* 2>/dev/null
+cp /etc/podkop-remnawave/backups/SELECTED_BACKUP /usr/bin/update-podkop-from-remnawave.sh
+chmod +x /usr/bin/update-podkop-from-remnawave.sh
+```
+
+Disable the guard binary:
+
+```sh
+mv /usr/bin/podkop-all-lists-guard.sh /usr/bin/podkop-all-lists-guard.sh.disabled.$(date +%Y%m%d-%H%M%S)
+```
+
+Restart cron:
+
+```sh
+service cron restart 2>/dev/null || /etc/init.d/cron restart
 ```
 
 ## Quick Start
