@@ -230,17 +230,18 @@ check_tailscale_after_podkop() {
   fi
 }
 
-echo "[INFO] Downloading Remnawave subscription..."
-
+echo "[SAFE-PODKOP-GUARD] Preparing guard before Remnawave subscription update..."
 ensure_guard_cron
 
 if ! guard_precheck; then
-  echo "[SAFE-PODKOP-GUARD] Precheck failed. Refusing to update Podkop from Remnawave."
-  echo "[SAFE-PODKOP-GUARD] Subscription, UCI, backups, and Podkop restart were not changed."
-  guard_apply || true
+  echo "[SAFE-PODKOP-GUARD][ERROR] Podkop subnet lists are not downloadable now."
+  echo "[SAFE-PODKOP-GUARD][ERROR] Skip RemnaWave subscription update to avoid breaking live Podkop routing."
+  guard_apply
   ensure_guard_cron
   exit 30
 fi
+
+echo "[INFO] Downloading Remnawave subscription..."
 
 curl -fsSL \
   --connect-timeout "$TIMEOUT" \
