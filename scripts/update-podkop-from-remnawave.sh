@@ -2,6 +2,7 @@
 set -eu
 
 CONF='/etc/podkop-remnawave/subscription.conf'
+PENDING_RUNTIME_RELOAD='/etc/podkop-remnawave/pending-runtime-reload'
 
 if [ ! -f "$CONF" ]; then
   echo "[ERROR] Missing config: $CONF"
@@ -33,9 +34,11 @@ TMP_USA_SRC="/tmp/remnawave-links-usa-src.$$.list"
 TMP_MAIN_KEEP="/tmp/podkop-main-keep.$$.list"
 TMP_USA_KEEP="/tmp/podkop-usa-keep.$$.list"
 TMP_UCI="/tmp/podkop-uci.$$.batch"
+TMP_CANDIDATE_DIR=''
 
 cleanup() {
   rm -f "$TMP_SUB" "$TMP_TXT" "$TMP_ALL" "$TMP_MAIN_SRC" "$TMP_USA_SRC" "$TMP_MAIN_KEEP" "$TMP_USA_KEEP" "$TMP_UCI"
+  [ -z "$TMP_CANDIDATE_DIR" ] || rm -rf "$TMP_CANDIDATE_DIR"
 }
 trap cleanup EXIT
 
@@ -146,58 +149,6 @@ write_urltest_section() {
   echo "set ${UCI_CFG}.${sec}.urltest_testing_url='https://www.gstatic.com/generate_204'"
 }
 
-restart_podkop_safely() {
-  echo "[INFO] Restarting Podkop safely..."
-
-  /etc/init.d/podkop stop || true
-  sleep 3
-
-  # A stale sing-box process can survive a Podkop stop and keep old transparent
-  # proxy/routing state active, which may also disturb Tailscale controlplane access.
-  if pgrep -x sing-box >/dev/null 2>&1; then
-    echo "[WARN] sing-box remained after Podkop stop. Killing stale process..."
-    killall sing-box || true
-    sleep 2
-  fi
-
-  if pgrep -x sing-box >/dev/null 2>&1; then
-    echo "[ERROR] Old sing-box process is still running. Refusing to start Podkop."
-    pgrep -af sing-box || true
-    exit 1
-  fi
-
-  /etc/init.d/podkop start
-  sleep 5
-
-  if pgrep -af sing-box >/dev/null 2>&1; then
-    echo "[OK] sing-box is running."
-  else
-    echo "[WARN] sing-box process was not found after Podkop start."
-    echo "[WARN] Check:"
-    echo "logread | grep -iE 'podkop|sing-box|error|failed|fatal|panic' | tail -n 120"
-  fi
-}
-
-check_tailscale_after_podkop() {
-  if ! command -v tailscale >/dev/null 2>&1; then
-    return 0
-  fi
-
-  ts_status="$(tailscale status 2>/dev/null || true)"
-
-  if [ -z "$ts_status" ]; then
-    echo "[WARN] tailscale is installed but status output is empty."
-    return 0
-  fi
-
-  if printf '%s\n' "$ts_status" | grep -qiE 'offline|coordination server|health.*warn|unable to connect'; then
-    echo "[WARN] Tailscale may be unhealthy after Podkop restart."
-    echo "[WARN] Check: tailscale status; tailscale netcheck; logread | grep -i tailscale | tail -n 120"
-  else
-    echo "[OK] Tailscale status does not report offline/coordination warnings."
-  fi
-}
-
 echo "[INFO] Downloading Remnawave subscription..."
 
 curl -fsSL \
@@ -215,9 +166,6 @@ else
     :
   else
     echo "[ERROR] Cannot decode subscription as base64 and no supported proxy links found."
-    echo "[DEBUG] First 300 bytes:"
-    head -c 300 "$TMP_SUB" | sed 's/[^[:print:]\t]/?/g'
-    echo
     exit 1
   fi
 fi
@@ -237,7 +185,6 @@ if grep -Eq '@0\.0\.0\.0:1|00000000-0000-0000-0000-000000000000|App%20not%20supp
   echo "[ERROR] Subscription returned placeholder / App not supported link."
   echo "[ERROR] Refusing to apply invalid links to Podkop."
   echo "[ERROR] Fix Remnawave user/squad/hosts/HWID/subscription settings first, then rerun."
-  grep -E '@0\.0\.0\.0:1|00000000-0000-0000-0000-000000000000|App%20not%20supported|App not supported' "$TMP_ALL" | sed 's/\?.*/?.../'
   exit 1
 fi
 
@@ -276,11 +223,10 @@ if [ "$ALL_COUNT" -lt 1 ]; then
   exit 1
 fi
 
-BACKUP="/etc/config/podkop.backup.$(date +%Y%m%d-%H%M%S)"
-cp /etc/config/podkop "$BACKUP"
-echo "[INFO] Backup saved: $BACKUP"
-
-ensure_section "$MAIN_SEC"
+MAIN_EXISTS=0
+if section_exists "$MAIN_SEC"; then
+  MAIN_EXISTS=1
+fi
 
 collect_manual_links "$MAIN_SEC" "$TMP_MAIN_SRC" "$TMP_MAIN_KEEP"
 
@@ -308,6 +254,10 @@ if [ "$MAIN_RW_COUNT" -eq 0 ] && [ "$MAIN_MANUAL_COUNT" -eq 0 ]; then
 fi
 
 {
+  if [ "$MAIN_EXISTS" -eq 0 ]; then
+    echo "set ${UCI_CFG}.${MAIN_SEC}=section"
+  fi
+
   write_urltest_section "$MAIN_SEC" "$TMP_MAIN_KEEP" "$TMP_MAIN_SRC"
 
   if [ "$USA_EXISTS" -eq 1 ]; then
@@ -321,9 +271,61 @@ fi
   echo "commit ${UCI_CFG}"
 } > "$TMP_UCI"
 
-uci -q batch < "$TMP_UCI"
+if uci -q changes "$UCI_CFG" | grep -q .; then
+  echo "[ERROR] Pending Podkop UCI changes detected. Refusing semantic comparison."
+  exit 1
+fi
 
-restart_podkop_safely
-check_tailscale_after_podkop
+TMP_CANDIDATE_DIR="$(mktemp -d /tmp/podkop-remnawave-candidate.XXXXXX)"
+chmod 700 "$TMP_CANDIDATE_DIR"
+mkdir "$TMP_CANDIDATE_DIR/.uci"
+cp /etc/config/podkop "$TMP_CANDIDATE_DIR/podkop"
 
-echo "[OK] Podkop updated from Remnawave subscription."
+if ! uci -c "$TMP_CANDIDATE_DIR" -t "$TMP_CANDIDATE_DIR/.uci" -q batch < "$TMP_UCI"; then
+  echo "[ERROR] Cannot build isolated Podkop candidate state."
+  exit 1
+fi
+
+uci -q show "$UCI_CFG" > "$TMP_CANDIDATE_DIR/current.state"
+uci -c "$TMP_CANDIDATE_DIR" -t "$TMP_CANDIDATE_DIR/.uci" -q show "$UCI_CFG" > "$TMP_CANDIDATE_DIR/candidate.state"
+
+if cmp -s "$TMP_CANDIDATE_DIR/current.state" "$TMP_CANDIDATE_DIR/candidate.state"; then
+  RESTART_REQUIRED=NO
+  LOG_MSG="RemnaWave managed configuration unchanged; runtime remains untouched"
+  echo "[INFO] $LOG_MSG"
+  logger -t remnawave-update "$LOG_MSG" 2>/dev/null || true
+  echo "CONFIG_CHANGED=NO"
+  echo "UCI_COMMIT=NO"
+  echo "PODKOP_RESTART=NO"
+  echo "SINGBOX_RESTART=NO"
+  echo "SINGBOX_KILL=NO"
+else
+  RESTART_REQUIRED=NO
+  LOG_MSG="RemnaWave managed configuration changed; applying with deferred runtime reload"
+  echo "[INFO] $LOG_MSG"
+  logger -t remnawave-update "$LOG_MSG" 2>/dev/null || true
+
+  BACKUP="/etc/config/podkop.backup.$(date +%Y%m%d-%H%M%S)"
+  cp /etc/config/podkop "$BACKUP"
+  echo "[INFO] Backup saved: $BACKUP"
+
+  uci -q batch < "$TMP_UCI"
+  mkdir -p "$(dirname "$PENDING_RUNTIME_RELOAD")"
+  config_hash="$(uci -q show "$UCI_CFG" | sha256sum | awk '{print $1}')"
+  marker_tmp="${PENDING_RUNTIME_RELOAD}.tmp.$$"
+  {
+    printf 'UPDATED_AT=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+    printf 'CONFIG_HASH=%s\n' "$config_hash"
+    printf 'RUNTIME_RELOAD_REQUIRED=YES\n'
+  } > "$marker_tmp"
+  chmod 600 "$marker_tmp"
+  mv "$marker_tmp" "$PENDING_RUNTIME_RELOAD"
+  echo "CONFIG_CHANGED=YES"
+  echo "CONFIG_COMMITTED=YES"
+  echo "RUNTIME_RELOAD_DEFERRED=YES"
+  echo "PODKOP_RESTART=NO"
+  echo "SINGBOX_RESTART=NO"
+  echo "SINGBOX_KILL=NO"
+fi
+
+echo "[OK] RemnaWave update cycle completed. RESTART_REQUIRED=$RESTART_REQUIRED"

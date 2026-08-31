@@ -1,0 +1,18 @@
+server {
+    listen 443 ssl http2;
+    server_name bootstrap.adeptpro.online;
+
+    root /srv/bootstrap.adeptpro.online/current;
+    index index.html;
+
+    location = /health.txt {
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    location /openwrt/v1/ {
+        default_type application/octet-stream;
+        try_files $uri =404;
+        add_header X-Content-Type-Options nosniff always;
+    }
+}

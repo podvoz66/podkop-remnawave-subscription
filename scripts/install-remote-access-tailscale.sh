@@ -93,39 +93,7 @@ sanitize_hostname() {
 }
 
 stop_orphan_singbox_for_tailscale() {
-  echo
-  echo "[STEP] Checking for orphan sing-box before Tailscale start..."
-
-  if ! pgrep -x sing-box >/dev/null 2>&1; then
-    echo "[OK] No sing-box process found."
-    return 0
-  fi
-
-  echo "[WARN] sing-box process is running."
-  echo "[WARN] Stopping Podkop first, if installed."
-
-  # A stale Podkop/sing-box process can keep old transparent proxy rules active
-  # and prevent tailscaled from reaching the Tailscale coordination server.
-  if [ -x /etc/init.d/podkop ]; then
-    /etc/init.d/podkop stop || true
-    sleep 3
-  else
-    echo "[WARN] /etc/init.d/podkop not found."
-  fi
-
-  if pgrep -x sing-box >/dev/null 2>&1; then
-    echo "[WARN] sing-box is still alive after Podkop stop. Killing stale process..."
-    killall sing-box || true
-    sleep 2
-  fi
-
-  if pgrep -x sing-box >/dev/null 2>&1; then
-    echo "[ERROR] sing-box is still running after killall."
-    pgrep -af sing-box || true
-    exit 1
-  fi
-
-  echo "[OK] No orphan sing-box remains."
+  echo "[INFO] Podkop and sing-box runtime are left untouched."
 }
 
 configure_luci_tailscale_access() {
@@ -138,15 +106,15 @@ configure_luci_tailscale_access() {
   echo "[STEP] Enable direct SSH/LuCI access through Tailscale"
 
   helper="/tmp/install-tailscale-direct-access.sh"
-  repo_raw_base="${REPO_RAW_BASE:-https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main}"
+  bootstrap_base_url="${BASE_URL:-https://bootstrap.adeptpro.online/openwrt/v1}"
 
   if command -v curl >/dev/null 2>&1; then
     curl -fsSL --connect-timeout 25 --max-time 60 \
-      "$repo_raw_base/scripts/install-tailscale-direct-access.sh" \
+      "$bootstrap_base_url/scripts/install-tailscale-direct-access.sh" \
       -o "$helper"
   else
     wget -O "$helper" \
-      "$repo_raw_base/scripts/install-tailscale-direct-access.sh"
+      "$bootstrap_base_url/scripts/install-tailscale-direct-access.sh"
   fi
 
   chmod +x "$helper"
