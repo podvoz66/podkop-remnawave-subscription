@@ -4,12 +4,15 @@ set -eu
 # One-command OpenWrt bootstrap for Podkop + Remnawave subscription + Tailscale.
 # POSIX/ash-compatible for OpenWrt BusyBox.
 
-REPO_REF="${REPO_REF:-main}"
-REPO_RAW_BASE="${REPO_RAW_BASE:-https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/$REPO_REF}"
-REPO_REAL_UPDATER_URL="$REPO_RAW_BASE/scripts/update-podkop-from-remnawave.sh"
-REPO_UPDATER_URL="$REPO_RAW_BASE/scripts/update-podkop-from-remnawave.guard.sh"
-REPO_GUARD_URL="$REPO_RAW_BASE/scripts/podkop-all-lists-guard.sh"
-PODKOP_INSTALL_URL="https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh"
+BASE_URL="${BASE_URL:-https://bootstrap.adeptpro.online/openwrt/v1}"
+PODKOP_APPROVED_VERSION='0.7.22'
+PODKOP_MANIFEST_URL="$BASE_URL/podkop/manifest.json"
+REPO_REAL_UPDATER_URL="$BASE_URL/scripts/update-podkop-from-remnawave.sh"
+REPO_UPDATER_URL="$BASE_URL/scripts/update-podkop-from-remnawave.guard.sh"
+REPO_GUARD_URL="$BASE_URL/scripts/podkop-all-lists-guard.sh"
+TAILSCALE_ACCESS_URL="$BASE_URL/scripts/install-tailscale-direct-access.sh"
+POSTBOOT_SCRIPT_URL="$BASE_URL/scripts/adeptpro-postboot.sh"
+POSTBOOT_INIT_URL="$BASE_URL/scripts/adeptpro-postboot.init"
 
 APP_DIR="/etc/podkop-remnawave"
 CONF="$APP_DIR/subscription.conf"
@@ -20,13 +23,12 @@ GUARD_DIR="/etc/podkop-guard"
 GUARD_CACHE_DIR="$GUARD_DIR/cache"
 GUARD_URLS="$GUARD_DIR/urls.txt"
 LOG="/tmp/podkop-sub-update.log"
-CRON_LINE="0 */4 * * * /usr/bin/update-podkop-from-remnawave.sh >/tmp/podkop-sub-update.log 2>&1"
+REMNAWAVE_SYNC_CRON="50 3 * * * /usr/bin/update-podkop-from-remnawave.sh >/tmp/podkop-sub-update.log 2>&1"
 GUARD_APPLY_CRON="*/2 * * * * /usr/bin/podkop-all-lists-guard.sh --apply >/tmp/podkop-all-lists-guard-apply.log 2>&1"
 GUARD_REFRESH_CRON="17 */6 * * * /usr/bin/podkop-all-lists-guard.sh --refresh >/tmp/podkop-all-lists-guard-refresh.log 2>&1"
 LINK_SCHEMES='(vless|ss|trojan|hysteria2|hy2)'
 
 INSTALL_RU_LOCALE="${INSTALL_RU_LOCALE:-1}"
-INSTALL_TTYD="${INSTALL_TTYD:-1}"
 INSTALL_PODKOP="${INSTALL_PODKOP:-auto}"
 UPDATE_PODKOP="${UPDATE_PODKOP:-1}"
 ENABLE_LUCI_TAILSCALE="${ENABLE_LUCI_TAILSCALE:-1}"
@@ -42,8 +44,19 @@ SET_OPENWRT_HOSTNAME="${SET_OPENWRT_HOSTNAME:-1}"
 BACKUP_DIR=""
 ROUTER_STATE=""
 OPENWRT_VERSION="unknown"
+OPENWRT_RELEASE="unknown"
+OPENWRT_MAJOR_MINOR="unknown"
 OPENWRT_TARGET="unknown"
 OPENWRT_ARCH="unknown"
+PACKAGE_MANAGER="unknown"
+PACKAGE_FORMAT="unknown"
+ROUTER_ARCHITECTURE="unknown"
+MANIFEST_ARCHITECTURE="unknown"
+PODKOP_PREPARED=0
+PODKOP_TMP=''
+PODKOP_PACKAGE=''
+LUCI_PODKOP_PACKAGE=''
+PODKOP_RU_PACKAGE=''
 ROUTER_NAME_INPUT=""
 ROUTER_NAME_SAFE=""
 TAILSCALE_HOSTNAME_SAFE=""
@@ -164,7 +177,6 @@ validate_flag() {
 
 validate_env() {
   validate_flag INSTALL_RU_LOCALE "$INSTALL_RU_LOCALE"
-  validate_flag INSTALL_TTYD "$INSTALL_TTYD"
   validate_flag ENABLE_LUCI_TAILSCALE "$ENABLE_LUCI_TAILSCALE"
   validate_flag DRY_RUN "$DRY_RUN"
   validate_flag INTERACTIVE "$INTERACTIVE"
@@ -357,6 +369,10 @@ bootstrap_failed() {
 on_exit() {
   rc="$1"
 
+  if [ -n "${PODKOP_TMP:-}" ] && [ -d "$PODKOP_TMP" ]; then
+    rm -rf "$PODKOP_TMP"
+  fi
+
   if [ "$rc" -ne 0 ]; then
     bootstrap_failed "$rc"
   fi
@@ -511,14 +527,59 @@ require_root_openwrt() {
 }
 
 pkg_detect() {
+  OPENWRT_RELEASE="$(read_release_value DISTRIB_RELEASE || true)"
+  OPENWRT_TARGET="$(read_release_value DISTRIB_TARGET || true)"
+  OPENWRT_ARCH="$(read_release_value DISTRIB_ARCH || true)"
+  OPENWRT_MAJOR_MINOR="$(printf '%s' "$OPENWRT_RELEASE" | awk -F. 'NF >= 2 {print $1 "." $2}')"
+
   if command -v apk >/dev/null 2>&1; then
-    PKG="apk"
+    PACKAGE_MANAGER='apk'
+    PACKAGE_FORMAT='apk'
   elif command -v opkg >/dev/null 2>&1; then
-    PKG="opkg"
+    PACKAGE_MANAGER='opkg'
+    PACKAGE_FORMAT='ipk'
   else
-    err "Neither apk nor opkg found."
+    err "Unsupported OpenWrt package manager: neither apk nor opkg is available."
     exit 1
   fi
+
+  case "$OPENWRT_MAJOR_MINOR" in
+    24.10)
+      [ "$PACKAGE_MANAGER" = 'opkg' ] || {
+        err "OpenWrt 24.10 requires opkg/ipk, but detected $PACKAGE_MANAGER/$PACKAGE_FORMAT."
+        exit 1
+      }
+      ;;
+    *)
+      release_major="$(printf '%s' "$OPENWRT_MAJOR_MINOR" | cut -d. -f1)"
+      release_minor="$(printf '%s' "$OPENWRT_MAJOR_MINOR" | cut -d. -f2)"
+      case "$release_major" in ''|*[!0-9]*) err "Unsupported or unreadable OpenWrt release: $OPENWRT_RELEASE"; exit 1 ;; esac
+      case "$release_minor" in ''|*[!0-9]*) err "Unsupported or unreadable OpenWrt release: $OPENWRT_RELEASE"; exit 1 ;; esac
+      if [ "$release_major" -gt 25 ] || { [ "$release_major" -eq 25 ] && [ "$release_minor" -ge 12 ]; }; then
+        [ "$PACKAGE_MANAGER" = 'apk' ] || {
+          err "OpenWrt $OPENWRT_MAJOR_MINOR requires apk/apk, but detected $PACKAGE_MANAGER/$PACKAGE_FORMAT."
+          exit 1
+        }
+      else
+        err "Unsupported OpenWrt release: $OPENWRT_RELEASE. Supported: 24.10.x and 25.12.x or newer."
+        exit 1
+      fi
+      ;;
+  esac
+
+  if [ "$PACKAGE_MANAGER" = 'apk' ]; then
+    ROUTER_ARCHITECTURE="$(apk --print-arch 2>/dev/null | head -n 1 || true)"
+  else
+    ROUTER_ARCHITECTURE="$(opkg print-architecture 2>/dev/null | awk '$1 == "arch" && $2 != "all" && $2 != "noarch" {arch=$2} END {print arch}' || true)"
+  fi
+  [ -n "$ROUTER_ARCHITECTURE" ] || ROUTER_ARCHITECTURE="$OPENWRT_ARCH"
+  ROUTER_ARCHITECTURE="$(printf '%s' "$ROUTER_ARCHITECTURE" | tr '-' '_')"
+  [ -n "$ROUTER_ARCHITECTURE" ] && [ "$ROUTER_ARCHITECTURE" != 'unknown' ] || {
+    err "Cannot determine router package architecture."
+    exit 1
+  }
+
+  PKG="$PACKAGE_MANAGER"
 }
 
 pkg_update() {
@@ -539,7 +600,7 @@ pkg_is_installed() {
   fi
 }
 
-pkg_install_one() {
+pkg_install_repo() {
   p="$1"
   critical="$2"
 
@@ -572,6 +633,24 @@ pkg_install_one() {
 
   warn "Package install failed or unavailable: $p"
   return 0
+}
+
+pkg_install_file() {
+  package_file="$1"
+  case "$PACKAGE_MANAGER:$package_file" in
+    apk:*.apk) run_cmd apk add --allow-untrusted "$package_file" ;;
+    opkg:*.ipk) run_cmd opkg install "$package_file" ;;
+    *) err "Package file does not match $PACKAGE_MANAGER/$PACKAGE_FORMAT: $package_file"; return 1 ;;
+  esac
+}
+
+pkg_remove() {
+  package_name="$1"
+  if [ "$PACKAGE_MANAGER" = 'apk' ]; then
+    run_cmd apk del "$package_name"
+  else
+    run_cmd opkg remove "$package_name"
+  fi
 }
 
 fetch() {
@@ -640,8 +719,6 @@ preflight() {
   step "Preflight diagnostics"
 
   OPENWRT_VERSION="$(read_release_value DISTRIB_DESCRIPTION || true)"
-  OPENWRT_TARGET="$(read_release_value DISTRIB_TARGET || true)"
-  OPENWRT_ARCH="$(read_release_value DISTRIB_ARCH || true)"
 
   [ -n "$OPENWRT_VERSION" ] || OPENWRT_VERSION="unknown"
   [ -n "$OPENWRT_TARGET" ] || OPENWRT_TARGET="unknown"
@@ -693,12 +770,16 @@ preflight() {
   fi
 
   echo "OpenWrt version: $OPENWRT_VERSION"
+  echo "OPENWRT_RELEASE=$OPENWRT_RELEASE"
+  echo "OPENWRT_MAJOR_MINOR=$OPENWRT_MAJOR_MINOR"
   echo "Target: $OPENWRT_TARGET"
   echo "Arch: $OPENWRT_ARCH"
   echo "Router name input: $ROUTER_NAME_INPUT"
   echo "Router name: $ROUTER_NAME_SAFE"
   echo "Tailscale hostname: $TAILSCALE_HOSTNAME_SAFE"
-  echo "Package manager: $PKG"
+  echo "PACKAGE_MANAGER=$PACKAGE_MANAGER"
+  echo "PACKAGE_FORMAT=$PACKAGE_FORMAT"
+  echo "ROUTER_ARCHITECTURE=$ROUTER_ARCHITECTURE"
   echo "opkg: $(command_state opkg)"
   echo "Internet ping 1.1.1.1: $internet_state"
   echo "DNS nslookup openwrt.org: $dns_state"
@@ -747,6 +828,10 @@ make_backup() {
     "$CONF" \
     "$UPDATER" \
     "$REAL_UPDATER" \
+    "$GUARD_BIN" \
+    "$GUARD_URLS" \
+    /usr/libexec/adeptpro-postboot.sh \
+    /etc/init.d/adeptpro-postboot \
     /etc/crontabs/root
   do
     if [ -f "$f" ]; then
@@ -763,12 +848,13 @@ install_dependencies() {
 
   pkg_update
 
-  pkg_install_one ca-bundle 0
-  pkg_install_one ca-certificates 0
-  pkg_install_one curl 0
+  pkg_install_repo ca-bundle 0
+  pkg_install_repo ca-certificates 0
+  pkg_install_repo curl 0
+  pkg_install_repo jsonfilter 1
 
   if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-    pkg_install_one wget 1
+    pkg_install_repo wget 1
   fi
 
   if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
@@ -779,78 +865,29 @@ install_dependencies() {
   if [ -c /dev/net/tun ]; then
     echo "[OK] /dev/net/tun already exists."
   else
-    pkg_install_one kmod-tun 1
+    pkg_install_repo kmod-tun 1
   fi
-  pkg_install_one tailscale 1
-  pkg_install_one iptables-nft 0
-  pkg_install_one ip6tables-nft 0
+  pkg_install_repo tailscale 1
+  pkg_install_repo iptables-nft 0
+  pkg_install_repo ip6tables-nft 0
 
   if [ "$INSTALL_RU_LOCALE" = "1" ]; then
-    pkg_install_one luci-i18n-base-ru 0
-    pkg_install_one luci-i18n-firewall-ru 0
-    pkg_install_one luci-i18n-opkg-ru 0
+    pkg_install_repo luci-i18n-base-ru 0
+    pkg_install_repo luci-i18n-firewall-ru 0
+    pkg_install_repo luci-i18n-opkg-ru 0
   else
     info "INSTALL_RU_LOCALE=0. Skipping Russian LuCI locale packages."
   fi
 
 }
 
-install_ttyd_optional() {
-  step "Optional ttyd installation"
-
-  if [ "$INSTALL_TTYD" != "1" ]; then
-    info "Skipping ttyd installation/update because INSTALL_TTYD=0."
-    return 0
-  fi
-
-  warn "Installing/updating ttyd may interrupt a current LuCI Terminal / ttyd session."
-  pkg_install_one ttyd 0 || warn "ttyd install failed or was interrupted."
-  pkg_install_one luci-app-ttyd 0 || warn "luci-app-ttyd install failed or was interrupted."
-
-  if [ -x /etc/init.d/ttyd ]; then
-    run_cmd /etc/init.d/ttyd enable || warn "Failed to enable ttyd autostart."
-    run_cmd /etc/init.d/ttyd restart || warn "Failed to restart ttyd."
-  fi
-}
-
-stop_orphan_singbox_for_tailscale() {
-  step "Check orphan sing-box before Tailscale"
-
-  if ! pgrep -x sing-box >/dev/null 2>&1; then
-    echo "[OK] No sing-box process found."
-    return 0
-  fi
-
-  warn "sing-box process is running."
-
-  if [ -x /etc/init.d/podkop ]; then
-    warn "Stopping Podkop first."
-    PODKOP_STOPPED_WARN=1
-    run_cmd /etc/init.d/podkop stop || true
-    sleep 3
+observe_singbox_for_tailscale() {
+  step "Observe sing-box before Tailscale"
+  if pgrep -x sing-box >/dev/null 2>&1; then
+    info "sing-box is running and will not be stopped or killed."
   else
-    warn "/etc/init.d/podkop not found."
+    info "No sing-box process found."
   fi
-
-  if pgrep -x sing-box >/dev/null 2>&1; then
-    warn "sing-box is still alive after Podkop stop. Killing stale process."
-    SINGBOX_KILLED_WARN=1
-    run_cmd killall sing-box || true
-    sleep 2
-  fi
-
-  if is_dry_run; then
-    echo "[DRY_RUN] skip post-cleanup sing-box assertion"
-    return 0
-  fi
-
-  if pgrep -x sing-box >/dev/null 2>&1; then
-    err "sing-box is still running after cleanup."
-    pgrep -af sing-box || true
-    exit 1
-  fi
-
-  echo "[OK] No orphan sing-box remains."
 }
 
 configure_luci_tailscale_access() {
@@ -868,7 +905,7 @@ configure_luci_tailscale_access() {
     return 0
   fi
 
-  fetch "$REPO_RAW_BASE/scripts/install-tailscale-direct-access.sh" "$helper"
+  fetch "$TAILSCALE_ACCESS_URL" "$helper"
   chmod +x "$helper"
 
   ENABLE_TAILSCALE_SSH_DIRECT="${ENABLE_TAILSCALE_SSH_DIRECT:-1}" \
@@ -975,7 +1012,7 @@ setup_tailscale() {
     exit 1
   fi
 
-  stop_orphan_singbox_for_tailscale
+  observe_singbox_for_tailscale
 
   run_cmd /etc/init.d/tailscale enable || true
   run_cmd /etc/init.d/tailscale restart || true
@@ -997,29 +1034,127 @@ setup_tailscale() {
   configure_luci_tailscale_access
 }
 
-run_podkop_installer_non_interactive() {
-  action="${1:-install}"
-  step "Run official Podkop installer for $action"
+prepare_podkop_from_mirror() {
+  step "Validate approved Podkop packages from AdeptPro mirror"
 
   if is_dry_run; then
-    echo "[DRY_RUN] fetch Podkop installer and run it with yes answers, including Russian localization prompt"
+    echo "[DRY_RUN] validate manifest version/platform/architecture and all package SHA256 values"
+    MANIFEST_ARCHITECTURE='all'
+    PODKOP_PREPARED=1
     return 0
   fi
 
-  fetch "$PODKOP_INSTALL_URL" /tmp/podkop-install.sh
-  chmod +x /tmp/podkop-install.sh
+  command -v jsonfilter >/dev/null 2>&1 || { err "jsonfilter is required for manifest validation."; exit 1; }
+  command -v sha256sum >/dev/null 2>&1 || { err "sha256sum is required for package validation."; exit 1; }
 
-  # Keep feeding "y" so the official Podkop installer confirms install/update
-  # prompts and enables Russian localization when the installer asks for it.
-  if command -v timeout >/dev/null 2>&1; then
-    timeout 900 sh -c "while true; do printf 'y\n'; sleep 1; done | sh /tmp/podkop-install.sh"
+  PODKOP_TMP="$(mktemp -d /tmp/adeptpro-podkop.XXXXXX)"
+  manifest_file="$PODKOP_TMP/manifest.json"
+  fetch "$PODKOP_MANIFEST_URL" "$manifest_file"
+
+  schema_version="$(jsonfilter -i "$manifest_file" -e '@.schemaVersion' 2>/dev/null || true)"
+  manifest_version="$(jsonfilter -i "$manifest_file" -e '@.podkopVersion' 2>/dev/null || true)"
+  [ "$schema_version" = '1' ] || { rm -rf "$PODKOP_TMP"; err "Unsupported Podkop manifest schema."; exit 1; }
+  [ "$manifest_version" = "$PODKOP_APPROVED_VERSION" ] || {
+    rm -rf "$PODKOP_TMP"
+    err "Mirror Podkop version does not match approved version $PODKOP_APPROVED_VERSION."
+    exit 1
+  }
+
+  exact_names="$(jsonfilter -i "$manifest_file" -e "@.platforms.$PACKAGE_MANAGER.architectures.$ROUTER_ARCHITECTURE[*].name" 2>/dev/null || true)"
+  if [ -n "$exact_names" ]; then
+    MANIFEST_ARCHITECTURE="$ROUTER_ARCHITECTURE"
   else
-    (
-      while true; do
-        printf 'y\n'
-        sleep 1
-      done
-    ) | sh /tmp/podkop-install.sh
+    all_names="$(jsonfilter -i "$manifest_file" -e "@.platforms.$PACKAGE_MANAGER.architectures.all[*].name" 2>/dev/null || true)"
+    [ -n "$all_names" ] || {
+      rm -rf "$PODKOP_TMP"
+      err "No $PACKAGE_MANAGER packages for router architecture $ROUTER_ARCHITECTURE (and no manifest 'all' fallback)."
+      exit 1
+    }
+    MANIFEST_ARCHITECTURE='all'
+  fi
+
+  names="$(jsonfilter -i "$manifest_file" -e "@.platforms.$PACKAGE_MANAGER.architectures.$MANIFEST_ARCHITECTURE[*].name" 2>/dev/null || true)"
+  package_count="$(printf '%s\n' "$names" | sed '/^$/d' | wc -l | tr -d ' ')"
+  [ "$package_count" = '3' ] || { rm -rf "$PODKOP_TMP"; err "Expected exactly 3 approved Podkop packages; found $package_count."; exit 1; }
+
+  index=0
+  PODKOP_PACKAGE=''
+  LUCI_PODKOP_PACKAGE=''
+  PODKOP_RU_PACKAGE=''
+  while [ "$index" -lt "$package_count" ]; do
+    expression="@.platforms.$PACKAGE_MANAGER.architectures.$MANIFEST_ARCHITECTURE[$index]"
+    name="$(jsonfilter -i "$manifest_file" -e "$expression.name" 2>/dev/null || true)"
+    expected_sha="$(jsonfilter -i "$manifest_file" -e "$expression.sha256" 2>/dev/null || true)"
+    expected_size="$(jsonfilter -i "$manifest_file" -e "$expression.size" 2>/dev/null || true)"
+    declared_manager="$(jsonfilter -i "$manifest_file" -e "$expression.packageManager" 2>/dev/null || true)"
+    declared_arch="$(jsonfilter -i "$manifest_file" -e "$expression.architecture" 2>/dev/null || true)"
+    relative_path="$(jsonfilter -i "$manifest_file" -e "$expression.path" 2>/dev/null || true)"
+
+    case "$name" in
+      luci-app-podkop-*.$PACKAGE_FORMAT) component='luci' ;;
+      luci-i18n-podkop-ru-*.$PACKAGE_FORMAT) component='ru' ;;
+      podkop-*.$PACKAGE_FORMAT) component='podkop' ;;
+      *) rm -rf "$PODKOP_TMP"; err "Unexpected package in approved manifest: $name"; exit 1 ;;
+    esac
+    [ "$declared_manager" = "$PACKAGE_MANAGER" ] || { rm -rf "$PODKOP_TMP"; err "Package-manager mismatch in manifest."; exit 1; }
+    [ "$declared_arch" = "$MANIFEST_ARCHITECTURE" ] || { rm -rf "$PODKOP_TMP"; err "Architecture mismatch in manifest."; exit 1; }
+    printf '%s' "$expected_sha" | grep -Eq '^[0-9a-f]{64}$' || { rm -rf "$PODKOP_TMP"; err "Invalid SHA256 in manifest."; exit 1; }
+    printf '%s' "$expected_size" | grep -Eq '^[1-9][0-9]*$' || { rm -rf "$PODKOP_TMP"; err "Invalid size in manifest."; exit 1; }
+    case "$relative_path" in
+      "$PACKAGE_MANAGER/$MANIFEST_ARCHITECTURE/"*.$PACKAGE_FORMAT) ;;
+      *) rm -rf "$PODKOP_TMP"; err "Unsafe or mismatched package path in manifest."; exit 1 ;;
+    esac
+
+    destination="$PODKOP_TMP/$name"
+    fetch "$BASE_URL/podkop/$PODKOP_APPROVED_VERSION/$relative_path" "$destination"
+    actual_size="$(wc -c < "$destination" | tr -d ' ')"
+    actual_sha="$(sha256sum "$destination" | awk '{print $1}')"
+    [ "$actual_size" = "$expected_size" ] || { rm -rf "$PODKOP_TMP"; err "Package size validation failed: $name"; exit 1; }
+    [ "$actual_sha" = "$expected_sha" ] || { rm -rf "$PODKOP_TMP"; err "Package SHA256 validation failed: $name"; exit 1; }
+
+    case "$component" in
+      podkop) PODKOP_PACKAGE="$destination" ;;
+      luci) LUCI_PODKOP_PACKAGE="$destination" ;;
+      ru) PODKOP_RU_PACKAGE="$destination" ;;
+    esac
+    index=$((index + 1))
+  done
+
+  [ -n "$PODKOP_PACKAGE" ] && [ -n "$LUCI_PODKOP_PACKAGE" ] && [ -n "$PODKOP_RU_PACKAGE" ] || {
+    rm -rf "$PODKOP_TMP"
+    err "Manifest does not contain all required Podkop components."
+    exit 1
+  }
+
+  PODKOP_PREPARED=1
+  echo "PODKOP_MIRROR_VALIDATION=PASS"
+}
+
+install_podkop_from_mirror() {
+  step "Install approved Podkop packages from AdeptPro mirror"
+  [ "$PODKOP_PREPARED" = '1' ] || prepare_podkop_from_mirror
+
+  if is_dry_run; then
+    echo "[DRY_RUN] install Podkop $PODKOP_APPROVED_VERSION with Russian localization via $PACKAGE_MANAGER"
+    return 0
+  fi
+
+  # No package-manager mutation occurs before every artifact above is validated.
+  pkg_update
+  pkg_install_file "$PODKOP_PACKAGE"
+  pkg_install_file "$LUCI_PODKOP_PACKAGE"
+  pkg_install_file "$PODKOP_RU_PACKAGE"
+  rm -rf "$PODKOP_TMP"
+  echo "PODKOP_INSTALL_INTERACTIVE=NO"
+  echo "PODKOP_RU=AUTO"
+  echo "PODKOP_APPROVED_VERSION=$PODKOP_APPROVED_VERSION"
+}
+
+prepare_podkop_if_required() {
+  if [ -f /etc/config/podkop ] || [ -x /etc/init.d/podkop ]; then
+    [ "$UPDATE_PODKOP" = '1' ] && prepare_podkop_from_mirror
+  else
+    case "$INSTALL_PODKOP" in auto|1) prepare_podkop_from_mirror ;; esac
   fi
 }
 
@@ -1030,14 +1165,8 @@ setup_podkop() {
     info "Podkop appears to be installed."
 
     if [ "$UPDATE_PODKOP" = "1" ]; then
-      info "UPDATE_PODKOP=1. Updating Podkop via official installer."
-      if run_podkop_installer_non_interactive "update"; then
-        echo "[OK] Podkop installer finished."
-      else
-        err "Podkop installer failed during update."
-        err "Rerun with UPDATE_PODKOP=0 to keep existing Podkop, or update Podkop manually."
-        exit 1
-      fi
+      info "UPDATE_PODKOP=1. Enforcing approved Podkop mirror version."
+      install_podkop_from_mirror
     else
       info "UPDATE_PODKOP=0. Keeping existing Podkop installation."
       if [ -x /etc/init.d/podkop ]; then
@@ -1054,14 +1183,8 @@ setup_podkop() {
       return 0
       ;;
     auto|1)
-      info "Podkop is not installed. Using official Podkop installer."
-      if run_podkop_installer_non_interactive "install"; then
-        echo "[OK] Podkop installer finished."
-      else
-        err "Podkop installer failed."
-        err "Install Podkop manually, then rerun this bootstrap with INSTALL_PODKOP=0 or auto."
-        exit 1
-      fi
+      info "Podkop is not installed. Installing the approved mirror release."
+      install_podkop_from_mirror
       ;;
   esac
 
@@ -1073,6 +1196,11 @@ setup_podkop() {
 
 ensure_dont_touch_dhcp() {
   step "Preserve external DHCP management"
+
+  if ! is_dry_run && [ ! -f /etc/config/podkop ]; then
+    warn "/etc/config/podkop is missing; cannot set dont_touch_dhcp."
+    return 0
+  fi
 
   if is_dry_run; then
     echo "[DRY_RUN] ensure podkop.settings.dont_touch_dhcp=1"
@@ -1097,13 +1225,17 @@ write_guard_inventory_if_missing() {
   fi
 
   if [ ! -s "$GUARD_URLS" ]; then
-    cat > "$GUARD_URLS" <<'EOF'
-https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Subnets/IPv4/cloudflare.lst
-https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Subnets/IPv4/discord.lst
-https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Subnets/IPv4/meta.lst
-https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Subnets/IPv4/telegram.lst
-https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Subnets/IPv4/twitter.lst
-EOF
+    {
+      printf '%s\n' "$BASE_URL/lists/cloudflare.lst"
+      printf '%s\n' "$BASE_URL/lists/discord.lst"
+      printf '%s\n' "$BASE_URL/lists/meta.lst"
+      printf '%s\n' "$BASE_URL/lists/telegram.lst"
+      printf '%s\n' "$BASE_URL/lists/twitter.lst"
+    } > "$GUARD_URLS"
+  else
+    for list_name in cloudflare.lst discord.lst meta.lst telegram.lst twitter.lst; do
+      sed -i "\#itdoginfo/allow-domains/main/Subnets/IPv4/$list_name\$#c\\$BASE_URL/lists/$list_name" "$GUARD_URLS"
+    done
   fi
 }
 
@@ -1186,7 +1318,7 @@ install_updater_and_cron() {
     echo "[DRY_RUN] install cron line for update-podkop-from-remnawave.sh"
   else
     grep -v 'update-podkop-from-remnawave.sh' /etc/crontabs/root 2>/dev/null > /tmp/root.cron.$$ || true
-    echo "$CRON_LINE" >> /tmp/root.cron.$$
+    echo "$REMNAWAVE_SYNC_CRON" >> /tmp/root.cron.$$
     cat /tmp/root.cron.$$ > /etc/crontabs/root
     rm -f /tmp/root.cron.$$
   fi
@@ -1194,6 +1326,26 @@ install_updater_and_cron() {
   if [ -x /etc/init.d/cron ]; then
     run_cmd /etc/init.d/cron restart || true
   fi
+}
+
+install_postboot_ttyd_oneshot() {
+  step "Schedule postboot ttyd installation"
+  postboot_script='/usr/libexec/adeptpro-postboot.sh'
+  postboot_init='/etc/init.d/adeptpro-postboot'
+
+  if is_dry_run; then
+    echo "[DRY_RUN] install and enable late postboot ttyd one-shot"
+    echo "POSTBOOT_TTYD=PENDING"
+    return 0
+  fi
+
+  mkdir -p /usr/libexec
+  fetch "$POSTBOOT_SCRIPT_URL" "$postboot_script"
+  fetch "$POSTBOOT_INIT_URL" "$postboot_init"
+  chmod 700 "$postboot_script"
+  chmod 755 "$postboot_init"
+  "$postboot_init" enable
+  echo "POSTBOOT_TTYD=PENDING"
 }
 
 write_subscription_config() {
@@ -1337,7 +1489,11 @@ final_report() {
   log_line "Subscription import count: $SUB_IMPORT_COUNT"
   log_line "Backup dir: ${BACKUP_DIR:-not-created}"
   log_line "Log file: ${LOG_FILE:-not-created}"
-  log_line "INSTALL_TTYD: $INSTALL_TTYD"
+  log_line "PACKAGE_MANAGER: $PACKAGE_MANAGER"
+  log_line "PACKAGE_FORMAT: $PACKAGE_FORMAT"
+  log_line "ROUTER_ARCHITECTURE: $ROUTER_ARCHITECTURE"
+  log_line "MANIFEST_ARCHITECTURE: $MANIFEST_ARCHITECTURE"
+  log_line "PODKOP_APPROVED_VERSION: $PODKOP_APPROVED_VERSION"
   log_line "UPDATE_PODKOP: $UPDATE_PODKOP"
   log_line "REBOOT_AFTER: $REBOOT_AFTER"
   log_line "REBOOT_DELAY: $REBOOT_DELAY"
@@ -1353,6 +1509,8 @@ final_report() {
     warn "A stale sing-box process was killed."
   fi
 
+  log_line "CRITICAL_BOOTSTRAP=PASS"
+  log_line "POSTBOOT_TTYD=PENDING"
   log_line "[SECURITY] WAN ports were not opened."
 }
 
@@ -1382,8 +1540,9 @@ prompt_startup_inputs
 validate_env
 preflight
 make_backup
-configure_openwrt_hostname
 install_dependencies
+prepare_podkop_if_required
+configure_openwrt_hostname
 setup_tailscale
 setup_podkop
 ensure_dont_touch_dhcp
@@ -1392,7 +1551,7 @@ if write_subscription_config; then
   run_subscription_update
   run_podkop_global_check
 fi
-install_ttyd_optional
+install_postboot_ttyd_oneshot
 final_report
 reboot_requirement
 BOOTSTRAP_COMPLETED=1

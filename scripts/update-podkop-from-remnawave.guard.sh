@@ -26,7 +26,7 @@ ensure_guard_cron() {
 echo "[SAFE-PODKOP-GUARD] Ensuring guard cron before update..."
 ensure_guard_cron
 
-echo "[SAFE-PODKOP-GUARD] Prechecking Podkop subnet lists before Podkop restart..."
+echo "[SAFE-PODKOP-GUARD] Prechecking Podkop subnet lists before configuration sync..."
 if ! "$GUARD_BIN" --precheck; then
   echo "[SAFE-PODKOP-GUARD][ERROR] Podkop subnet lists are not downloadable now."
   echo "[SAFE-PODKOP-GUARD][ERROR] Skip RemnaWave outbound update to protect live routing."

@@ -6,11 +6,12 @@ CACHE_DIR="$GUARD_DIR/cache"
 URLS_FILE="$GUARD_DIR/urls.txt"
 LOG_TAG="podkop-all-lists-guard"
 
-DEFAULT_URLS='https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Subnets/IPv4/cloudflare.lst
-https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Subnets/IPv4/discord.lst
-https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Subnets/IPv4/meta.lst
-https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Subnets/IPv4/telegram.lst
-https://raw.githubusercontent.com/itdoginfo/allow-domains/main/Subnets/IPv4/twitter.lst'
+BASE_URL="${BASE_URL:-https://bootstrap.adeptpro.online/openwrt/v1}"
+DEFAULT_URLS="$BASE_URL/lists/cloudflare.lst
+$BASE_URL/lists/discord.lst
+$BASE_URL/lists/meta.lst
+$BASE_URL/lists/telegram.lst
+$BASE_URL/lists/twitter.lst"
 
 log_msg() {
   level="$1"
@@ -42,6 +43,10 @@ ensure_inventory() {
     printf '%s\n' "$DEFAULT_URLS" > "$URLS_FILE"
     info "Created default URL inventory: $URLS_FILE"
   fi
+
+  for list_name in cloudflare.lst discord.lst meta.lst telegram.lst twitter.lst; do
+    sed -i "\#itdoginfo/allow-domains/main/Subnets/IPv4/$list_name\$#c\\$BASE_URL/lists/$list_name" "$URLS_FILE"
+  done
 }
 
 cache_name_for_url() {
