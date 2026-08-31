@@ -33,10 +33,12 @@ TMP_USA_SRC="/tmp/remnawave-links-usa-src.$$.list"
 TMP_MAIN_KEEP="/tmp/podkop-main-keep.$$.list"
 TMP_USA_KEEP="/tmp/podkop-usa-keep.$$.list"
 TMP_UCI="/tmp/podkop-uci.$$.batch"
+TMP_CANDIDATE_DIR=''
 GUARD_BIN="/usr/bin/podkop-all-lists-guard.sh"
 
 cleanup() {
   rm -f "$TMP_SUB" "$TMP_TXT" "$TMP_ALL" "$TMP_MAIN_SRC" "$TMP_USA_SRC" "$TMP_MAIN_KEEP" "$TMP_USA_KEEP" "$TMP_UCI"
+  [ -z "$TMP_CANDIDATE_DIR" ] || rm -rf "$TMP_CANDIDATE_DIR"
 }
 trap cleanup EXIT
 
@@ -230,17 +232,6 @@ check_tailscale_after_podkop() {
   fi
 }
 
-echo "[SAFE-PODKOP-GUARD] Preparing guard before Remnawave subscription update..."
-ensure_guard_cron
-
-if ! guard_precheck; then
-  echo "[SAFE-PODKOP-GUARD][ERROR] Podkop subnet lists are not downloadable now."
-  echo "[SAFE-PODKOP-GUARD][ERROR] Skip RemnaWave subscription update to avoid breaking live Podkop routing."
-  guard_apply
-  ensure_guard_cron
-  exit 30
-fi
-
 echo "[INFO] Downloading Remnawave subscription..."
 
 curl -fsSL \
@@ -258,9 +249,6 @@ else
     :
   else
     echo "[ERROR] Cannot decode subscription as base64 and no supported proxy links found."
-    echo "[DEBUG] First 300 bytes:"
-    head -c 300 "$TMP_SUB" | sed 's/[^[:print:]\t]/?/g'
-    echo
     exit 1
   fi
 fi
@@ -280,7 +268,6 @@ if grep -Eq '@0\.0\.0\.0:1|00000000-0000-0000-0000-000000000000|App%20not%20supp
   echo "[ERROR] Subscription returned placeholder / App not supported link."
   echo "[ERROR] Refusing to apply invalid links to Podkop."
   echo "[ERROR] Fix Remnawave user/squad/hosts/HWID/subscription settings first, then rerun."
-  grep -E '@0\.0\.0\.0:1|00000000-0000-0000-0000-000000000000|App%20not%20supported|App not supported' "$TMP_ALL" | sed 's/\?.*/?.../'
   exit 1
 fi
 
@@ -319,11 +306,10 @@ if [ "$ALL_COUNT" -lt 1 ]; then
   exit 1
 fi
 
-BACKUP="/etc/config/podkop.backup.$(date +%Y%m%d-%H%M%S)"
-cp /etc/config/podkop "$BACKUP"
-echo "[INFO] Backup saved: $BACKUP"
-
-ensure_section "$MAIN_SEC"
+MAIN_EXISTS=0
+if section_exists "$MAIN_SEC"; then
+  MAIN_EXISTS=1
+fi
 
 collect_manual_links "$MAIN_SEC" "$TMP_MAIN_SRC" "$TMP_MAIN_KEEP"
 
@@ -351,6 +337,10 @@ if [ "$MAIN_RW_COUNT" -eq 0 ] && [ "$MAIN_MANUAL_COUNT" -eq 0 ]; then
 fi
 
 {
+  if [ "$MAIN_EXISTS" -eq 0 ]; then
+    echo "set ${UCI_CFG}.${MAIN_SEC}=section"
+  fi
+
   write_urltest_section "$MAIN_SEC" "$TMP_MAIN_KEEP" "$TMP_MAIN_SRC"
 
   if [ "$USA_EXISTS" -eq 1 ]; then
@@ -364,11 +354,42 @@ fi
   echo "commit ${UCI_CFG}"
 } > "$TMP_UCI"
 
-uci -q batch < "$TMP_UCI"
+if uci -q changes "$UCI_CFG" | grep -q .; then
+  echo "[ERROR] Pending Podkop UCI changes detected. Refusing semantic comparison."
+  exit 1
+fi
 
-restart_podkop_safely
-guard_apply
-ensure_guard_cron
-check_tailscale_after_podkop
+TMP_CANDIDATE_DIR="$(mktemp -d /tmp/podkop-remnawave-candidate.XXXXXX)"
+chmod 700 "$TMP_CANDIDATE_DIR"
+mkdir "$TMP_CANDIDATE_DIR/.uci"
+cp /etc/config/podkop "$TMP_CANDIDATE_DIR/podkop"
 
-echo "[OK] Podkop updated from Remnawave subscription."
+if ! uci -c "$TMP_CANDIDATE_DIR" -t "$TMP_CANDIDATE_DIR/.uci" -q batch < "$TMP_UCI"; then
+  echo "[ERROR] Cannot build isolated Podkop candidate state."
+  exit 1
+fi
+
+uci -q show "$UCI_CFG" > "$TMP_CANDIDATE_DIR/current.state"
+uci -c "$TMP_CANDIDATE_DIR" -t "$TMP_CANDIDATE_DIR/.uci" -q show "$UCI_CFG" > "$TMP_CANDIDATE_DIR/candidate.state"
+
+if cmp -s "$TMP_CANDIDATE_DIR/current.state" "$TMP_CANDIDATE_DIR/candidate.state"; then
+  RESTART_REQUIRED=NO
+  LOG_MSG="RemnaWave managed configuration unchanged; skipping Podkop restart"
+  echo "[INFO] $LOG_MSG"
+  logger -t remnawave-update "$LOG_MSG" 2>/dev/null || true
+else
+  RESTART_REQUIRED=YES
+  LOG_MSG="RemnaWave managed configuration changed; applying and restarting Podkop"
+  echo "[INFO] $LOG_MSG"
+  logger -t remnawave-update "$LOG_MSG" 2>/dev/null || true
+
+  BACKUP="/etc/config/podkop.backup.$(date +%Y%m%d-%H%M%S)"
+  cp /etc/config/podkop "$BACKUP"
+  echo "[INFO] Backup saved: $BACKUP"
+
+  uci -q batch < "$TMP_UCI"
+  restart_podkop_safely
+  check_tailscale_after_podkop
+fi
+
+echo "[OK] RemnaWave update cycle completed. RESTART_REQUIRED=$RESTART_REQUIRED"

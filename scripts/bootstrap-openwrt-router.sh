@@ -4,14 +4,17 @@ set -eu
 # One-command OpenWrt bootstrap for Podkop + Remnawave subscription + Tailscale.
 # POSIX/ash-compatible for OpenWrt BusyBox.
 
-REPO_RAW_BASE="https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main"
-REPO_UPDATER_URL="$REPO_RAW_BASE/scripts/update-podkop-from-remnawave.sh"
+REPO_REF="${REPO_REF:-main}"
+REPO_RAW_BASE="${REPO_RAW_BASE:-https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/$REPO_REF}"
+REPO_REAL_UPDATER_URL="$REPO_RAW_BASE/scripts/update-podkop-from-remnawave.sh"
+REPO_UPDATER_URL="$REPO_RAW_BASE/scripts/update-podkop-from-remnawave.guard.sh"
 REPO_GUARD_URL="$REPO_RAW_BASE/scripts/podkop-all-lists-guard.sh"
 PODKOP_INSTALL_URL="https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh"
 
 APP_DIR="/etc/podkop-remnawave"
 CONF="$APP_DIR/subscription.conf"
 UPDATER="/usr/bin/update-podkop-from-remnawave.sh"
+REAL_UPDATER="/usr/bin/update-podkop-from-remnawave.real.sh"
 GUARD_BIN="/usr/bin/podkop-all-lists-guard.sh"
 GUARD_DIR="/etc/podkop-guard"
 GUARD_CACHE_DIR="$GUARD_DIR/cache"
@@ -743,6 +746,7 @@ make_backup() {
     /etc/config/firewall \
     "$CONF" \
     "$UPDATER" \
+    "$REAL_UPDATER" \
     /etc/crontabs/root
   do
     if [ -f "$f" ]; then
@@ -1067,6 +1071,25 @@ setup_podkop() {
   fi
 }
 
+ensure_dont_touch_dhcp() {
+  step "Preserve external DHCP management"
+
+  if is_dry_run; then
+    echo "[DRY_RUN] ensure podkop.settings.dont_touch_dhcp=1"
+    return 0
+  fi
+
+  current="$(uci -q get podkop.settings.dont_touch_dhcp 2>/dev/null || true)"
+  if [ "$current" = "1" ]; then
+    echo "[OK] podkop.settings.dont_touch_dhcp=1 is already set."
+    return 0
+  fi
+
+  uci set podkop.settings.dont_touch_dhcp='1'
+  uci commit podkop
+  echo "[OK] podkop.settings.dont_touch_dhcp=1 configured."
+}
+
 write_guard_inventory_if_missing() {
   if is_dry_run; then
     echo "[DRY_RUN] create $GUARD_URLS with static Podkop subnet list URLs if missing"
@@ -1154,8 +1177,9 @@ install_updater_and_cron() {
     chmod 700 "$APP_DIR" "$APP_DIR/backups"
   fi
 
+  fetch "$REPO_REAL_UPDATER_URL" "$REAL_UPDATER"
   fetch "$REPO_UPDATER_URL" "$UPDATER"
-  run_cmd chmod +x "$UPDATER"
+  run_cmd chmod 700 "$REAL_UPDATER" "$UPDATER"
   install_subnet_guard
 
   if is_dry_run; then
@@ -1245,6 +1269,27 @@ run_subscription_update() {
 
   if grep -q 'Killing stale process' "$LOG" 2>/dev/null; then
     SINGBOX_KILLED_WARN=1
+  fi
+}
+
+run_podkop_global_check() {
+  step "Podkop global runtime validation"
+
+  if is_dry_run; then
+    echo "[DRY_RUN] podkop global_check"
+    return 0
+  fi
+
+  if ! command -v podkop >/dev/null 2>&1; then
+    err "podkop command is missing; global_check cannot run."
+    exit 1
+  fi
+
+  if podkop global_check; then
+    echo "[OK] podkop global_check passed."
+  else
+    err "podkop global_check failed."
+    exit 1
   fi
 }
 
@@ -1341,9 +1386,11 @@ configure_openwrt_hostname
 install_dependencies
 setup_tailscale
 setup_podkop
+ensure_dont_touch_dhcp
 if write_subscription_config; then
   install_updater_and_cron
   run_subscription_update
+  run_podkop_global_check
 fi
 install_ttyd_optional
 final_report
