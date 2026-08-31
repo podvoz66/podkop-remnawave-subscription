@@ -39,3 +39,24 @@
 - `sh -n`/`bash -n` selected from each file shebang: PASS for all shell files.
 - `git diff --check`: PASS.
 - `shellcheck`: not installed; skipped without failing the suite as required.
+
+## 2026-09-01 PR review blocker remediation
+
+- Scope remained repository-only; PR #2 was not merged and production was not accessed.
+- Review backup: `C:\Users\Podvoz\Documents\New project\backups\adeptpro-bootstrap-v2-review-20260901-012742`.
+- Replaced both legacy installers with AdeptPro Bootstrap v2 compatibility launchers.
+  The existing-Podkop launcher preserves the installation and disables hostname change
+  and reboot by default while allowing explicit environment overrides.
+- Removed the router-side GitHub dependency and Podkop/sing-box stop/kill behavior from
+  the legacy Tailscale entrypoint.
+- Added a boot-time deferred runtime marker handler. It performs a bounded wait,
+  requires sing-box plus `podkop global_check`, verifies the current UCI SHA256, and
+  atomically moves the marker only after success. It never restarts or kills runtime.
+- Static discovery now scans every router-side `.sh`/`.init` automatically. The only
+  server-side GitHub allowlist is the mirror sync script and deployment scripts.
+- Static suite: PASS (`STATIC_TEST_FAILURES=0`, 12 router scripts discovered).
+- Runtime marker success and marker-preservation failure tests: PASS.
+- Router GitHub dependencies, four-hour cron, periodic Podkop restart, periodic
+  sing-box restart/kill, and ttyd critical-path counts: 0.
+- Added-content secret pattern scan: 0 findings. `git diff --check`: PASS.
+- `sh -n`/`bash -n`: PASS via Git Bash. `shellcheck`: unavailable locally.

@@ -13,6 +13,8 @@ REPO_GUARD_URL="$BASE_URL/scripts/podkop-all-lists-guard.sh"
 TAILSCALE_ACCESS_URL="$BASE_URL/scripts/install-tailscale-direct-access.sh"
 POSTBOOT_SCRIPT_URL="$BASE_URL/scripts/adeptpro-postboot.sh"
 POSTBOOT_INIT_URL="$BASE_URL/scripts/adeptpro-postboot.init"
+RUNTIME_STATE_SCRIPT_URL="$BASE_URL/scripts/adeptpro-runtime-state.sh"
+RUNTIME_STATE_INIT_URL="$BASE_URL/scripts/adeptpro-runtime-state.init"
 
 APP_DIR="/etc/podkop-remnawave"
 CONF="$APP_DIR/subscription.conf"
@@ -832,6 +834,8 @@ make_backup() {
     "$GUARD_URLS" \
     /usr/libexec/adeptpro-postboot.sh \
     /etc/init.d/adeptpro-postboot \
+    /usr/libexec/adeptpro-runtime-state.sh \
+    /etc/init.d/adeptpro-runtime-state \
     /etc/crontabs/root
   do
     if [ -f "$f" ]; then
@@ -1348,6 +1352,24 @@ install_postboot_ttyd_oneshot() {
   echo "POSTBOOT_TTYD=PENDING"
 }
 
+install_runtime_state_handler() {
+  step "Install boot-time deferred runtime state handler"
+  runtime_state_script='/usr/libexec/adeptpro-runtime-state.sh'
+  runtime_state_init='/etc/init.d/adeptpro-runtime-state'
+
+  if is_dry_run; then
+    echo "[DRY_RUN] install and enable boot-time runtime state handler"
+    return 0
+  fi
+
+  mkdir -p /usr/libexec
+  fetch "$RUNTIME_STATE_SCRIPT_URL" "$runtime_state_script"
+  fetch "$RUNTIME_STATE_INIT_URL" "$runtime_state_init"
+  chmod 700 "$runtime_state_script"
+  chmod 755 "$runtime_state_init"
+  "$runtime_state_init" enable
+}
+
 write_subscription_config() {
   if [ "$SUBSCRIPTION_SOURCE" = "skipped-invalid-url" ]; then
     SUB_IMPORT_COUNT=0
@@ -1551,6 +1573,7 @@ if write_subscription_config; then
   run_subscription_update
   run_podkop_global_check
 fi
+install_runtime_state_handler
 install_postboot_ttyd_oneshot
 final_report
 reboot_requirement

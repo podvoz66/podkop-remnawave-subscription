@@ -21,6 +21,8 @@ for script_name in \
   update-podkop-from-remnawave.guard.sh \
   podkop-all-lists-guard.sh \
   install-tailscale-direct-access.sh \
+  adeptpro-runtime-state.sh \
+  adeptpro-runtime-state.init \
   adeptpro-postboot.sh \
   adeptpro-postboot.init; do
   cp "$REPOSITORY_ROOT/scripts/$script_name" "$release_root/openwrt/v1/scripts/$script_name"
