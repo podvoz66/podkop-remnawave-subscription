@@ -40,10 +40,28 @@ expected_ipk_metadata() {
   esac
 }
 
+approved_asset_sha256() {
+  case "$1" in
+    'luci-app-podkop-0.7.22-r1.apk') printf '%s\n' '72addad80b71a9f44ea64af011c24b405c98b7a2b94751166a5668deeab7ad53' ;;
+    'luci-app-podkop-v0.7.22-r1-all.ipk') printf '%s\n' 'd9c1fb0a657236bf8da145e3c29ad701623e6e504900d8ebd25c8d4b829d78ba' ;;
+    'luci-i18n-podkop-ru-0.7.22.apk') printf '%s\n' '8977ce5f659b0cafefbcc7ae9f549c6eddf6a95fbfeac934e418b033bcda414a' ;;
+    'luci-i18n-podkop-ru-0.7.22.ipk') printf '%s\n' 'a2cb99c0ae67d187c576b2531b7ec4041dd35d964aedd5f481afe35d3c602874' ;;
+    'podkop-0.7.22-r1.apk') printf '%s\n' '5abf1422f73819d0834fd3ca81ccd55aaa7631e8665dc03e8c0d629811302e27' ;;
+    'podkop-v0.7.22-r1-all.ipk') printf '%s\n' 'f6e64451957099a5c0ef8092057ffb813d6ce15f711980073b350140a8c5b23b' ;;
+    *) die "No pinned SHA256 contract for $1" ;;
+  esac
+}
+
 verify_github_digest() {
   computed_sha256="$1"
-  github_digest="$2"
-  asset_name="$3"
+  pinned_sha256="$2"
+  github_digest="$3"
+  asset_name="$4"
+
+  [ "${#pinned_sha256}" -eq 64 ] || die "Invalid pinned SHA256 length for $asset_name"
+  case "$pinned_sha256" in *[!0-9a-fA-F]*) die "Invalid pinned SHA256 for $asset_name" ;; esac
+  [ "$computed_sha256" = "$pinned_sha256" ] || die "Pinned SHA256 mismatch for $asset_name"
+  echo "PINNED_SHA_MATCH=YES ASSET=$asset_name"
 
   if [ -z "$github_digest" ] || [ "$github_digest" = 'null' ]; then
     echo "GITHUB_DIGEST=UNAVAILABLE ASSET=$asset_name"
@@ -56,6 +74,7 @@ verify_github_digest() {
   esac
   [ "${#expected_sha256}" -eq 64 ] || die "Invalid GitHub SHA256 length for $asset_name"
   case "$expected_sha256" in *[!0-9a-fA-F]*) die "Invalid GitHub SHA256 for $asset_name" ;; esac
+  [ "$expected_sha256" = "$pinned_sha256" ] || die "GitHub digest differs from pinned SHA256 for $asset_name"
   [ "$computed_sha256" = "$expected_sha256" ] || die "GitHub digest mismatch for $asset_name"
   echo "GITHUB_DIGEST_MATCH=YES ASSET=$asset_name"
 }
@@ -209,8 +228,9 @@ for asset_name in "${EXPECTED_ASSETS[@]}"; do
   curl -fsSL --retry 3 --connect-timeout 20 "$asset_url" -o "$destination"
   [ -s "$destination" ] || die "Downloaded empty asset: $asset_name"
   sha256="$(sha256sum "$destination" | awk '{print $1}')"
+  pinned_sha256="$(approved_asset_sha256 "$asset_name")"
   github_digest="$(jq -r --arg name "$asset_name" '.assets[] | select(.name == $name) | (.digest // empty)' "$api_json")"
-  verify_github_digest "$sha256" "$github_digest" "$asset_name"
+  verify_github_digest "$sha256" "$pinned_sha256" "$github_digest" "$asset_name"
   if [ "$package_manager" = 'opkg' ]; then
     metadata_contract="$(expected_ipk_metadata "$asset_name")"
     expected_package="${metadata_contract%%	*}"

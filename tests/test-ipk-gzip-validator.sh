@@ -52,16 +52,33 @@ echo 'IPK_PACKAGE_NAME_VALIDATION=PASS'
 echo 'IPK_VERSION_VALIDATION=PASS'
 
 valid_sha="$(sha256sum "$valid_ipk" | awk '{print $1}')"
-verify_github_digest "$valid_sha" "sha256:$valid_sha" "$(basename "$valid_ipk")" >/dev/null
+pinned_count=0
+for approved_asset in "${EXPECTED_ASSETS[@]}"; do
+  pinned_value="$(approved_asset_sha256 "$approved_asset")"
+  [ "${#pinned_value}" -eq 64 ]
+  case "$pinned_value" in *[!0-9a-fA-F]*) echo 'PINNED_ASSET_SHA256_VALIDATION=FAIL'; exit 1 ;; esac
+  pinned_count=$((pinned_count + 1))
+done
+echo "PINNED_ASSET_SHA256_COUNT=$pinned_count"
+[ "$pinned_count" -eq 6 ]
+echo 'PINNED_ASSET_SHA256_VALIDATION=PASS'
+
+verify_github_digest "$valid_sha" "$valid_sha" "sha256:$valid_sha" "$(basename "$valid_ipk")" >/dev/null
 echo 'GITHUB_ASSET_DIGEST_VALIDATION=PASS'
+echo 'GITHUB_DIGEST_EQUALS_PINNED=PASS'
 wrong_digest='0000000000000000000000000000000000000000000000000000000000000000'
-if (verify_github_digest "$valid_sha" "sha256:$wrong_digest" "$(basename "$valid_ipk")" >/dev/null 2>&1); then
-  echo 'FAIL_CLOSED_GITHUB_DIGEST_MISMATCH=FAIL'
+if (verify_github_digest "$valid_sha" "$wrong_digest" '' "$(basename "$valid_ipk")" >/dev/null 2>&1); then
+  echo 'PINNED_SHA_MISMATCH_FAIL_CLOSED=FAIL'
   exit 1
 fi
-echo 'FAIL_CLOSED_GITHUB_DIGEST_MISMATCH=PASS'
-unavailable_log="$(verify_github_digest "$valid_sha" '' "$(basename "$valid_ipk")")"
-if [ "$unavailable_log" != "GITHUB_DIGEST=UNAVAILABLE ASSET=$(basename "$valid_ipk")" ]; then
+echo 'PINNED_SHA_MISMATCH_FAIL_CLOSED=PASS'
+if (verify_github_digest "$valid_sha" "$valid_sha" "sha256:$wrong_digest" "$(basename "$valid_ipk")" >/dev/null 2>&1); then
+  echo 'GITHUB_DIGEST_MISMATCH_FAIL_CLOSED=FAIL'
+  exit 1
+fi
+echo 'GITHUB_DIGEST_MISMATCH_FAIL_CLOSED=PASS'
+unavailable_log="$(verify_github_digest "$valid_sha" "$valid_sha" '' "$(basename "$valid_ipk")")"
+if ! printf '%s\n' "$unavailable_log" | grep -q "^GITHUB_DIGEST=UNAVAILABLE ASSET=$(basename "$valid_ipk")$"; then
   echo 'GITHUB_DIGEST_UNAVAILABLE_LOGGING=FAIL'
   exit 1
 fi

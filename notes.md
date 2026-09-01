@@ -86,3 +86,23 @@
   gzip-tar/architecture checks `3/3`, and manifest SHA256 matches `6/6`.
 - The isolated validation tree was removed after success. Production mirror
   `current` remains absent; NPM and Remnawave were not changed.
+
+## 2026-09-01 Podkop 0.7.22 pinned asset SHA256 hardening
+
+- Continued PR #3 at approved head `94ff87d5feb566246322796810ba5b99d603a350`;
+  PR merge remains out of scope.
+- Backup: `C:\Users\Podvoz\Documents\New project\backups\podkop-pinned-sha256-20260901-093415`.
+- Fresh GitHub release API metadata reports `immutable=false`, exactly six assets,
+  and all six API digests exactly match the separately approved SHA256 allowlist.
+- The six approved SHA256 values are pinned in repository history. Trust order is:
+  exact approved filename, computed bytes equal pinned SHA256, optional GitHub digest
+  equal both pinned and computed SHA256, then the existing package-format validator.
+- GitHub metadata is never used to update the pinned values automatically.
+- Scope remains server-side sync and regression tests only; router bootstrap, IPK
+  gzip-tar parsing, APK format handling, production mirror, NPM, Remnawave, and the
+  production wizard are unchanged.
+- Synthetic supply-chain tests: PASS, including pinned SHA mismatch and GitHub digest
+  mismatch fail-closed cases plus explicit unavailable-digest logging.
+- Repeated real-assets sync under an isolated `/tmp` tree: PASS. Pinned SHA matches
+  `6/6`, GitHub digest matches `6/6`, manifest SHA matches `6/6`, IPK count `3`, and
+  APK count `3`. The temp tree was removed; production `current` remains absent.
