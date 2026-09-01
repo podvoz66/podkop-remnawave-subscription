@@ -60,3 +60,49 @@
   sing-box restart/kill, and ttyd critical-path counts: 0.
 - Added-content secret pattern scan: 0 findings. `git diff --check`: PASS.
 - `sh -n`/`bash -n`: PASS via Git Bash. `shellcheck`: unavailable locally.
+
+## 2026-09-01 OpenWrt 24.10.6 IPK validator correction
+
+- Branch base: merged `main` commit `6160f9a7cc1fd81ac1e98cd127d3f3327c8ed10d`.
+- Backup: `C:\Users\Podvoz\Documents\New project\backups\openwrt24-ipk-validator-20260901-092222`.
+- Official reference: `openwrt/openwrt`, tag `v24.10.6`, file `scripts/ipkg-build`.
+- `OPENWRT_24_10_6_IPK_CONTAINER=gzip-tar`.
+- `IPK_MAGIC=1f8b`.
+- Required outer TAR members: `./debian-binary`, `./control.tar.gz`, and
+  `./data.tar.gz` (the validator also accepts their equivalent names without `./`).
+- Upstream `ipkg-build` creates gzip-compressed `data.tar.gz` and `control.tar.gz`,
+  writes `debian-binary` as `2.0`, archives all three into an outer TAR, and gzip
+  compresses that TAR into the final IPK.
+- Actual approved IPK metadata read before implementation:
+  `podkop` and `luci-app-podkop` use `v0.7.22-r1`; Russian localization uses
+  `0.260818.58098`; all three declare `Architecture: all`.
+- GitHub release API exposes a SHA256 digest for each of the six approved assets.
+- Scope is server-side mirror validation only. Router bootstrap, production mirror,
+  NPM, Remnawave, and the production wizard remain unchanged.
+- Synthetic gzip-tar IPK regression suite: PASS, including corrupt gzip, missing
+  control metadata, wrong architecture, and GitHub digest mismatch fail-closed cases.
+- Real server-side sync ran only under an isolated `/tmp/adeptpro-mirror-validation-*`
+  tree: `MIRROR_SYNC=PASS`, IPK `3/3`, APK `3/3`, GitHub digest matches `6/6`,
+  gzip-tar/architecture checks `3/3`, and manifest SHA256 matches `6/6`.
+- The isolated validation tree was removed after success. Production mirror
+  `current` remains absent; NPM and Remnawave were not changed.
+
+## 2026-09-01 Podkop 0.7.22 pinned asset SHA256 hardening
+
+- Continued PR #3 at approved head `94ff87d5feb566246322796810ba5b99d603a350`;
+  PR merge remains out of scope.
+- Backup: `C:\Users\Podvoz\Documents\New project\backups\podkop-pinned-sha256-20260901-093415`.
+- Fresh GitHub release API metadata reports `immutable=false`, exactly six assets,
+  and all six API digests exactly match the separately approved SHA256 allowlist.
+- The six approved SHA256 values are pinned in repository history. Trust order is:
+  exact approved filename, computed bytes equal pinned SHA256, optional GitHub digest
+  equal both pinned and computed SHA256, then the existing package-format validator.
+- GitHub metadata is never used to update the pinned values automatically.
+- Scope remains server-side sync and regression tests only; router bootstrap, IPK
+  gzip-tar parsing, APK format handling, production mirror, NPM, Remnawave, and the
+  production wizard are unchanged.
+- Synthetic supply-chain tests: PASS, including pinned SHA mismatch and GitHub digest
+  mismatch fail-closed cases plus explicit unavailable-digest logging.
+- Repeated real-assets sync under an isolated `/tmp` tree: PASS. Pinned SHA matches
+  `6/6`, GitHub digest matches `6/6`, manifest SHA matches `6/6`, IPK count `3`, and
+  APK count `3`. The temp tree was removed; production `current` remains absent.
