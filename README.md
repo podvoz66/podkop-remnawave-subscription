@@ -119,9 +119,53 @@ RemnaWave subscription
 
 The main components are:
 
-* `scripts/update-podkop-from-remnawave.sh`: downloads the Remnawave subscription, preserves manual links, updates Podkop UCI, restarts Podkop safely, and invokes the guard before and after the restart.
+* `scripts/update-podkop-from-remnawave.sh`: downloads the Remnawave subscription, builds a subscription-only URLTest pool by default, optionally preserves manual links only when enabled, applies SHA-256 denylist filtering, updates Podkop UCI, restarts Podkop safely, validates runtime health, rolls back on validation failure, and invokes the guard before and after the restart.
 * `scripts/podkop-all-lists-guard.sh`: downloads and caches static community subnet lists and re-applies cached CIDR entries to Podkop nft sets.
 * `examples/subscription.conf.example`: template for `/etc/podkop-remnawave/subscription.conf`.
+
+## Safe updater modes
+
+The updater is subscription-only by default. It builds `podkop.main.urltest_proxy_links` from the current Remnawave subscription after updater normalization:
+
+* VLESS Reality links get `spx=%2F` when missing.
+* Subscription-managed links receive the `rwsub` marker.
+* Duplicate links are removed while preserving first-seen order.
+
+Manual or legacy links already present on the router are not preserved unless this flag is explicitly enabled:
+
+```sh
+PRESERVE_MANUAL_LINKS='1'
+```
+
+The safe default is:
+
+```sh
+PRESERVE_MANUAL_LINKS='0'
+```
+
+Quarantine bad candidates by full SHA-256 hash of the normalized final link:
+
+```sh
+DENYLIST_SHA256='fullhash1 fullhash2'
+```
+
+You can also put full hashes, one per line, in:
+
+```sh
+/etc/podkop-remnawave/denylist.sha256
+```
+
+Reports and dry-runs print only 12-character hash prefixes. Prefixes are not precise enough for `DENYLIST_SHA256`; use the full SHA-256 hash.
+
+Dry-run mode is safe to run before unfreezing cron:
+
+```sh
+/usr/bin/update-podkop-from-remnawave.sh --dry-run
+```
+
+Dry-run downloads and parses the subscription, applies normalization, preserve-manual rules, and denylist filtering, then prints only counts, protocols, and hash prefixes. It does not change UCI, restart services, change nft/routes, or edit cron.
+
+Normal apply creates a backup under `/root/podkop-remnawave-backups/`, commits Podkop UCI, restarts Podkop, validates sing-box listeners, validates FakeIP DNS for YouTube/Telegram/Instagram, and runs lightweight URLTest site checks where curl and the Clash API are available. If validation fails, it restores the backup and restarts Podkop again.
 
 ## Podkop subnet guard
 
@@ -388,6 +432,45 @@ sync && reboot
 
 If bootstrap fails, automatic reboot is not performed. The script prints `[ERROR] Bootstrap failed.`, the backup directory, the log path, and the last 80 log lines.
 
+### Fresh Router Success Criteria
+
+Fresh OpenWrt bootstrap installs the Remnawave updater and the Podkop/Tailscale protection layer as first-class files:
+
+```text
+/etc/podkop-remnawave/subscription.conf        mode 600
+/usr/bin/update-podkop-from-remnawave.sh       mode 700
+/root/apply-podkop-router-output-bypass.sh     mode 700
+/usr/bin/podkop-tailscale-protect.sh           mode 700
+```
+
+The root cron is normalized idempotently so these jobs are present exactly once:
+
+```text
+0 */4 * * * /usr/bin/update-podkop-from-remnawave.sh >/tmp/podkop-sub-update.log 2>&1
+* * * * * /root/apply-podkop-router-output-bypass.sh >/tmp/podkop-router-output-bypass.log 2>&1
+* * * * * /usr/bin/podkop-tailscale-protect.sh >/tmp/podkop-tailscale-protect.log 2>&1
+13 9 * * * /usr/bin/podkop list_update
+```
+
+Bootstrap waits `FINAL_TAILSCALE_WAIT=180` seconds before the final success gate because Tailscale controlplane failures can appear after roughly two minutes, not immediately. Success requires:
+
+* subscription config exists;
+* updater exists and is executable;
+* `podkop.main.urltest_proxy_links` contains at least one `vless://`, `ss://`, or `trojan://` link;
+* `sing-box` is running;
+* the current Tailscale hostname is not reported offline when Tailscale is installed.
+
+Run masked diagnostics on a test router:
+
+```sh
+wget -O /tmp/validate-openwrt-router.sh \
+  https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main/scripts/validate-openwrt-router.sh
+chmod +x /tmp/validate-openwrt-router.sh
+/tmp/validate-openwrt-router.sh
+```
+
+Never paste Tailscale auth keys, subscription URLs, UUIDs, proxy links, Shadowsocks passwords, short IDs, or tokens into GitHub issues, logs, screenshots, or chat.
+
 If you run bootstrap from LuCI Terminal / ttyd, use:
 
 ```sh
@@ -466,6 +549,8 @@ Edit `/etc/podkop-remnawave/subscription.conf` and set your real Remnawave subsc
 
 ```sh
 SUB_URL='https://sub.example.com/YOUR_TOKEN'
+PRESERVE_MANUAL_LINKS='0'
+DENYLIST_SHA256=''
 ```
 
 Install the script:
@@ -478,14 +563,15 @@ chmod +x /usr/bin/update-podkop-from-remnawave.sh
 Run once:
 
 ```sh
+/usr/bin/update-podkop-from-remnawave.sh --dry-run
 /usr/bin/update-podkop-from-remnawave.sh
 ```
 
 Check result:
 
 ```sh
-uci show podkop.main | grep 'urltest_proxy_links'
-uci show podkop.USA | grep 'urltest_proxy_links'
+uci -q get podkop.main.urltest_proxy_links | tr ' ' '\n' | grep -Ec '^(vless|ss|trojan|hysteria2|hy2)://'
+uci -q get podkop.USA.urltest_proxy_links | tr ' ' '\n' | grep -Ec '^(vless|ss|trojan|hysteria2|hy2)://' || true
 pgrep -af sing-box
 netstat -lntup 2>/dev/null | grep -E '1602|9090|sing|podkop' || true
 ```

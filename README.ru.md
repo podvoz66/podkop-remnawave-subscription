@@ -14,6 +14,49 @@
   - `USA` = только `us-direct-reality`;
 - перезапускает Podkop/sing-box.
 
+По умолчанию updater работает в subscription-only режиме: итоговый
+`podkop.main.urltest_proxy_links` строится из текущей Remnawave subscription
+после нормализации. Старые manual/legacy links не сохраняются, если явно не
+включить:
+
+```sh
+PRESERVE_MANUAL_LINKS='1'
+```
+
+Безопасный default:
+
+```sh
+PRESERVE_MANUAL_LINKS='0'
+```
+
+Для quarantine плохих ссылок поддерживается denylist по full SHA-256 от
+normalized final link:
+
+```sh
+DENYLIST_SHA256='fullhash1 fullhash2'
+```
+
+Также можно использовать файл:
+
+```sh
+/etc/podkop-remnawave/denylist.sha256
+```
+
+В отчётах и dry-run выводятся только 12 символов hash prefix. Для denylist
+нужен полный SHA-256, prefix недостаточен.
+
+Безопасная проверка перед cron/apply:
+
+```sh
+/usr/bin/update-podkop-from-remnawave.sh --dry-run
+```
+
+Dry-run не меняет UCI, не рестартит сервисы, не меняет nft/routes/cron и
+показывает только counts, protocols и hash prefixes. Обычный apply создаёт
+backup в `/root/podkop-remnawave-backups/`, рестартит Podkop, проверяет
+sing-box listeners, FakeIP DNS для YouTube/Telegram/Instagram и URLTest site
+delay, если доступен Clash API. При ошибке validation скрипт откатывает backup.
+
 Итоговая схема:
 
 ```text
@@ -298,6 +341,8 @@ SUB_URL='https://sub.adeptpro.online/ROUTER_SUBSCRIPTION_TOKEN' \
 mkdir -p /etc/podkop-remnawave
 cat >/etc/podkop-remnawave/subscription.conf <<'EOF_CONF'
 SUB_URL='https://sub.example.com/YOUR_TOKEN'
+PRESERVE_MANUAL_LINKS='0'
+DENYLIST_SHA256=''
 EOF_CONF
 chmod 600 /etc/podkop-remnawave/subscription.conf
 ```
@@ -312,16 +357,17 @@ chmod +x /usr/bin/update-podkop-from-remnawave.sh
 Запустить вручную:
 
 ```sh
+/usr/bin/update-podkop-from-remnawave.sh --dry-run
 /usr/bin/update-podkop-from-remnawave.sh
 ```
 
 Ожидаемый вывод:
 
 ```text
-[INFO] Found subscription links total: 8
-[INFO] Remnawave links for main: 7
-[INFO] Remnawave links for USA: 1
-[OK] sing-box is running.
+[INFO] preserve_manual=0
+[INFO] subscription_count=8
+[INFO] main_candidate_count=7
+[OK] youtube.com resolves to FakeIP.
 [OK] Podkop updated from Remnawave subscription.
 ```
 
@@ -338,8 +384,8 @@ hy2://
 Проверить секции:
 
 ```sh
-uci show podkop.main | grep 'urltest_proxy_links'
-uci show podkop.USA | grep 'urltest_proxy_links'
+uci -q get podkop.main.urltest_proxy_links | tr ' ' '\n' | grep -Ec '^(vless|ss|trojan|hysteria2|hy2)://'
+uci -q get podkop.USA.urltest_proxy_links | tr ' ' '\n' | grep -Ec '^(vless|ss|trojan|hysteria2|hy2)://' || true
 pgrep -af sing-box
 netstat -lntup 2>/dev/null | grep -E '1602|9090|sing|podkop' || true
 ```

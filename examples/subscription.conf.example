@@ -1,3 +1,5 @@
 # Copy to /etc/podkop-remnawave/subscription.conf on OpenWrt.
 # Do not commit real tokens to GitHub.
 SUB_URL='https://sub.example.com/YOUR_TOKEN'
+PRESERVE_MANUAL_LINKS='0'
+DENYLIST_SHA256=''
