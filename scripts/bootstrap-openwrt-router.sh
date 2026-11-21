@@ -4,9 +4,11 @@ set -eu
 # One-command OpenWrt bootstrap for Podkop + Remnawave subscription + Tailscale.
 # POSIX/ash-compatible for OpenWrt BusyBox.
 
-REPO_RAW_BASE="https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main"
+REPO_RAW_BASE="${REPO_RAW_BASE:-https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main}"
 REPO_UPDATER_URL="$REPO_RAW_BASE/scripts/update-podkop-from-remnawave.sh"
 REPO_GUARD_URL="$REPO_RAW_BASE/scripts/podkop-all-lists-guard.sh"
+REPO_BYPASS_URL="$REPO_RAW_BASE/scripts/apply-podkop-router-output-bypass.sh"
+REPO_TAILSCALE_PROTECT_URL="$REPO_RAW_BASE/scripts/podkop-tailscale-protect.sh"
 PODKOP_INSTALL_URL="https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh"
 
 APP_DIR="/etc/podkop-remnawave"
@@ -16,8 +18,13 @@ GUARD_BIN="/usr/bin/podkop-all-lists-guard.sh"
 GUARD_DIR="/etc/podkop-guard"
 GUARD_CACHE_DIR="$GUARD_DIR/cache"
 GUARD_URLS="$GUARD_DIR/urls.txt"
+BYPASS_BIN="/root/apply-podkop-router-output-bypass.sh"
+TAILSCALE_PROTECT_BIN="/usr/bin/podkop-tailscale-protect.sh"
 LOG="/tmp/podkop-sub-update.log"
 CRON_LINE="0 */4 * * * /usr/bin/update-podkop-from-remnawave.sh >/tmp/podkop-sub-update.log 2>&1"
+PODKOP_LIST_UPDATE_CRON="13 9 * * * /usr/bin/podkop list_update"
+BYPASS_CRON="* * * * * /root/apply-podkop-router-output-bypass.sh >/tmp/podkop-router-output-bypass.log 2>&1"
+TAILSCALE_PROTECT_CRON="* * * * * /usr/bin/podkop-tailscale-protect.sh >/tmp/podkop-tailscale-protect.log 2>&1"
 GUARD_APPLY_CRON="*/2 * * * * /usr/bin/podkop-all-lists-guard.sh --apply >/tmp/podkop-all-lists-guard-apply.log 2>&1"
 GUARD_REFRESH_CRON="17 */6 * * * /usr/bin/podkop-all-lists-guard.sh --refresh >/tmp/podkop-all-lists-guard-refresh.log 2>&1"
 LINK_SCHEMES='(vless|ss|trojan|hysteria2|hy2)'
@@ -26,15 +33,18 @@ INSTALL_RU_LOCALE="${INSTALL_RU_LOCALE:-1}"
 INSTALL_TTYD="${INSTALL_TTYD:-1}"
 INSTALL_PODKOP="${INSTALL_PODKOP:-auto}"
 UPDATE_PODKOP="${UPDATE_PODKOP:-1}"
+ENABLE_TAILSCALE="${ENABLE_TAILSCALE:-1}"
 ENABLE_LUCI_TAILSCALE="${ENABLE_LUCI_TAILSCALE:-1}"
 DRY_RUN="${DRY_RUN:-0}"
 INTERACTIVE="${INTERACTIVE:-1}"
 REBOOT_AFTER="${REBOOT_AFTER:-1}"
 REBOOT_DELAY="${REBOOT_DELAY:-15}"
+FINAL_TAILSCALE_WAIT="${FINAL_TAILSCALE_WAIT:-180}"
 LOG_FILE="${LOG_FILE:-/root/podkop-bootstrap.log}"
 ROUTER_NAME="${ROUTER_NAME:-}"
 TAILSCALE_HOSTNAME="${TAILSCALE_HOSTNAME:-}"
 SET_OPENWRT_HOSTNAME="${SET_OPENWRT_HOSTNAME:-1}"
+REQUIRE_SUBSCRIPTION="${REQUIRE_SUBSCRIPTION:-1}"
 
 BACKUP_DIR=""
 ROUTER_STATE=""
@@ -162,15 +172,24 @@ validate_flag() {
 validate_env() {
   validate_flag INSTALL_RU_LOCALE "$INSTALL_RU_LOCALE"
   validate_flag INSTALL_TTYD "$INSTALL_TTYD"
+  validate_flag ENABLE_TAILSCALE "$ENABLE_TAILSCALE"
   validate_flag ENABLE_LUCI_TAILSCALE "$ENABLE_LUCI_TAILSCALE"
   validate_flag DRY_RUN "$DRY_RUN"
   validate_flag INTERACTIVE "$INTERACTIVE"
   validate_flag REBOOT_AFTER "$REBOOT_AFTER"
   validate_flag SET_OPENWRT_HOSTNAME "$SET_OPENWRT_HOSTNAME"
+  validate_flag REQUIRE_SUBSCRIPTION "$REQUIRE_SUBSCRIPTION"
 
   case "$REBOOT_DELAY" in
     ''|*[!0-9]*)
       err "REBOOT_DELAY must be a non-negative integer."
+      exit 1
+      ;;
+  esac
+
+  case "$FINAL_TAILSCALE_WAIT" in
+    ''|*[!0-9]*)
+      err "FINAL_TAILSCALE_WAIT must be a non-negative integer."
       exit 1
       ;;
   esac
@@ -743,6 +762,9 @@ make_backup() {
     /etc/config/firewall \
     "$CONF" \
     "$UPDATER" \
+    "$BYPASS_BIN" \
+    "$TAILSCALE_PROTECT_BIN" \
+    "$GUARD_BIN" \
     /etc/crontabs/root
   do
     if [ -f "$f" ]; then
@@ -873,6 +895,31 @@ configure_luci_tailscale_access() {
     sh "$helper"
 }
 
+configure_dropbear_tailscale_access() {
+  step "Configure Dropbear SSH access"
+
+  if ! command -v uci >/dev/null 2>&1; then
+    warn "uci command not found. Cannot configure Dropbear."
+    return 0
+  fi
+
+  if [ ! -x /etc/init.d/dropbear ] && ! is_dry_run; then
+    warn "/etc/init.d/dropbear not found. Skipping Dropbear configuration."
+    return 0
+  fi
+
+  run_cmd uci delete dropbear.@dropbear[0].Interface 2>/dev/null || true
+  run_cmd uci set dropbear.@dropbear[0].Port='22'
+  run_cmd uci set dropbear.@dropbear[0].PasswordAuth='on'
+  run_cmd uci set dropbear.@dropbear[0].RootPasswordAuth='on'
+  run_cmd uci commit dropbear
+
+  if [ -x /etc/init.d/dropbear ]; then
+    run_cmd /etc/init.d/dropbear enable || true
+    run_cmd /etc/init.d/dropbear restart || true
+  fi
+}
+
 tailscale_diagnostics() {
   echo
   echo "[DEBUG] tailscale status:"
@@ -965,6 +1012,11 @@ run_tailscale_up() {
 
 setup_tailscale() {
   step "Configure Tailscale"
+
+  if [ "$ENABLE_TAILSCALE" != "1" ]; then
+    warn "ENABLE_TAILSCALE=0. Skipping Tailscale setup and final Tailscale validation."
+    return 0
+  fi
 
   if [ ! -x /etc/init.d/tailscale ] && ! is_dry_run; then
     err "/etc/init.d/tailscale not found after package install."
@@ -1142,6 +1194,82 @@ install_subnet_guard() {
   fi
 }
 
+install_protection_scripts() {
+  step "Install Podkop/Tailscale protection scripts"
+
+  fetch "$REPO_BYPASS_URL" "$BYPASS_BIN"
+  fetch "$REPO_TAILSCALE_PROTECT_URL" "$TAILSCALE_PROTECT_BIN"
+  run_cmd chmod 700 "$BYPASS_BIN"
+  run_cmd chmod 700 "$TAILSCALE_PROTECT_BIN"
+}
+
+apply_podkop_protection() {
+  step "Apply Podkop/Tailscale protection"
+
+  if is_dry_run; then
+    echo "[DRY_RUN] $BYPASS_BIN || true"
+    echo "[DRY_RUN] $TAILSCALE_PROTECT_BIN || true"
+    return 0
+  fi
+
+  if [ -x "$BYPASS_BIN" ]; then
+    "$BYPASS_BIN" || true
+  else
+    warn "$BYPASS_BIN is missing or not executable."
+  fi
+
+  if [ -x "$TAILSCALE_PROTECT_BIN" ]; then
+    "$TAILSCALE_PROTECT_BIN" || true
+  else
+    warn "$TAILSCALE_PROTECT_BIN is missing or not executable."
+  fi
+}
+
+normalize_root_cron() {
+  step "Normalize root cron"
+
+  if is_dry_run; then
+    echo "[DRY_RUN] install updater, Podkop list_update, protection, and guard cron lines exactly once"
+    return 0
+  fi
+
+  tmp="/tmp/root.cron.$$"
+
+  if crontab -l > "$tmp.current" 2>/dev/null; then
+    :
+  elif [ -f /etc/crontabs/root ]; then
+    cp /etc/crontabs/root "$tmp.current"
+  else
+    : > "$tmp.current"
+  fi
+
+  grep -v 'update-podkop-from-remnawave.sh' "$tmp.current" \
+    | grep -v 'podkop list_update' \
+    | grep -v 'apply-podkop-router-output-bypass.sh' \
+    | grep -v 'podkop-tailscale-protect.sh' \
+    | grep -v 'podkop-all-lists-guard.sh' \
+    > "$tmp" || true
+
+  echo "$CRON_LINE" >> "$tmp"
+  echo "$BYPASS_CRON" >> "$tmp"
+  echo "$TAILSCALE_PROTECT_CRON" >> "$tmp"
+  echo "$PODKOP_LIST_UPDATE_CRON" >> "$tmp"
+  echo "$GUARD_APPLY_CRON" >> "$tmp"
+  echo "$GUARD_REFRESH_CRON" >> "$tmp"
+
+  if command -v crontab >/dev/null 2>&1; then
+    crontab "$tmp"
+  else
+    cat "$tmp" > /etc/crontabs/root
+  fi
+
+  rm -f "$tmp" "$tmp.current"
+
+  if [ -x /etc/init.d/cron ]; then
+    /etc/init.d/cron restart || true
+  fi
+}
+
 install_updater_and_cron() {
   step "Install Remnawave updater"
 
@@ -1155,30 +1283,28 @@ install_updater_and_cron() {
   fi
 
   fetch "$REPO_UPDATER_URL" "$UPDATER"
-  run_cmd chmod +x "$UPDATER"
+  run_cmd chmod 700 "$UPDATER"
+  install_protection_scripts
   install_subnet_guard
-
-  if is_dry_run; then
-    echo "[DRY_RUN] install cron line for update-podkop-from-remnawave.sh"
-  else
-    grep -v 'update-podkop-from-remnawave.sh' /etc/crontabs/root 2>/dev/null > /tmp/root.cron.$$ || true
-    echo "$CRON_LINE" >> /tmp/root.cron.$$
-    cat /tmp/root.cron.$$ > /etc/crontabs/root
-    rm -f /tmp/root.cron.$$
-  fi
-
-  if [ -x /etc/init.d/cron ]; then
-    run_cmd /etc/init.d/cron restart || true
-  fi
+  normalize_root_cron
 }
 
 write_subscription_config() {
   if [ "$SUBSCRIPTION_SOURCE" = "skipped-invalid-url" ]; then
     SUB_IMPORT_COUNT=0
+    if [ "$REQUIRE_SUBSCRIPTION" = "1" ]; then
+      err "Valid SUB_URL is required for bootstrap. Set REQUIRE_SUBSCRIPTION=0 only for diagnostics-only runs."
+      exit 1
+    fi
     return 1
   fi
 
   if [ -z "${SUB_URL:-}" ]; then
+    if [ "$REQUIRE_SUBSCRIPTION" = "1" ]; then
+      err "SUB_URL is required for bootstrap and must start with http:// or https://."
+      err "Set REQUIRE_SUBSCRIPTION=0 only for diagnostics-only runs."
+      exit 1
+    fi
     warn "SUB_URL is not set. Subscription import will be skipped."
     SUB_IMPORT_COUNT="skipped"
     SUBSCRIPTION_SOURCE="skipped"
@@ -1205,6 +1331,8 @@ write_subscription_config() {
     printf "SUB_URL='"
     printf '%s' "$SUB_URL" | sed "s/'/'\\\\''/g"
     printf "'\n"
+    printf "PRESERVE_MANUAL_LINKS='0'\n"
+    printf "DENYLIST_SHA256=''\n"
   } > "$CONF"
   chmod 600 "$CONF"
 }
@@ -1236,7 +1364,7 @@ run_subscription_update() {
     exit 1
   fi
 
-  SUB_IMPORT_COUNT="$(sed -n 's/^\[INFO\] Found subscription links total: //p' "$LOG" | tail -n 1)"
+  SUB_IMPORT_COUNT="$(sed -n 's/^\[INFO\] subscription_count=//p' "$LOG" | tail -n 1)"
   [ -n "$SUB_IMPORT_COUNT" ] || SUB_IMPORT_COUNT="unknown"
 
   if grep -q 'Podkop/sing-box may have been stopped\|sing-box remained after Podkop stop' "$LOG" 2>/dev/null; then
@@ -1246,6 +1374,117 @@ run_subscription_update() {
   if grep -q 'Killing stale process' "$LOG" 2>/dev/null; then
     SINGBOX_KILLED_WARN=1
   fi
+}
+
+count_main_supported_links() {
+  uci -q get podkop.main.urltest_proxy_links 2>/dev/null \
+    | tr ' ' '\n' \
+    | grep -Ec '^(vless|ss|trojan)://' 2>/dev/null || true
+}
+
+sanitize_diagnostics() {
+  sed 's#https\?://[^[:space:]]*#URL***MASKED***#g; s#vless://[^[:space:]]*#vless://***MASKED***#g; s#trojan://[^[:space:]]*#trojan://***MASKED***#g; s#ss://[^[:space:]]*#ss://***MASKED***#g; s#hysteria2://[^[:space:]]*#hysteria2://***MASKED***#g; s#hy2://[^[:space:]]*#hy2://***MASKED***#g; s/tskey-[^[:space:]]*/tskey-***MASKED***/g'
+}
+
+bootstrap_validation_diagnostics() {
+  echo
+  echo "[DIAG] Subscription config:"
+  ls -l "$CONF" 2>/dev/null || true
+  echo
+  echo "[DIAG] Updater/protection scripts:"
+  ls -l "$UPDATER" "$BYPASS_BIN" "$TAILSCALE_PROTECT_BIN" 2>/dev/null || true
+  echo
+  echo "[DIAG] Podkop main supported link count: $(count_main_supported_links)"
+  echo
+  echo "[DIAG] sing-box processes:"
+  pgrep -af sing-box 2>/dev/null | sanitize_diagnostics || true
+  echo
+  echo "[DIAG] relevant cron lines:"
+  if crontab -l >/tmp/bootstrap-cron-diag.$$ 2>/dev/null; then
+    grep -E 'update-podkop-from-remnawave|podkop list_update|apply-podkop-router-output-bypass|podkop-tailscale-protect' /tmp/bootstrap-cron-diag.$$ || true
+  elif [ -f /etc/crontabs/root ]; then
+    grep -E 'update-podkop-from-remnawave|podkop list_update|apply-podkop-router-output-bypass|podkop-tailscale-protect' /etc/crontabs/root || true
+  fi
+  rm -f /tmp/bootstrap-cron-diag.$$
+  echo
+  echo "[DIAG] Tailscale status:"
+  tailscale status 2>/dev/null | sed -n '1,40p' | sanitize_diagnostics || true
+  echo
+  echo "[DIAG] recent critical logs:"
+  logread 2>/dev/null \
+    | grep -iE 'PollNetMap|map response|context canceled|not-in-map-poll|fatal|panic|podkop|sing-box|tailscale' \
+    | tail -n 120 \
+    | sanitize_diagnostics || true
+}
+
+validate_bootstrap_success() {
+  step "Validate bootstrap success after delayed Tailscale check"
+
+  if [ "$REQUIRE_SUBSCRIPTION" != "1" ] && [ -z "${SUB_URL:-}" ]; then
+    warn "REQUIRE_SUBSCRIPTION=0 and SUB_URL is empty. Skipping subscription success validation."
+    return 0
+  fi
+
+  if is_dry_run; then
+    echo "[DRY_RUN] wait $FINAL_TAILSCALE_WAIT seconds and validate subscription/updater/Podkop/sing-box/Tailscale"
+    return 0
+  fi
+
+  if [ "$FINAL_TAILSCALE_WAIT" -gt 0 ]; then
+    info "Waiting ${FINAL_TAILSCALE_WAIT} seconds before final Tailscale validation."
+    sleep "$FINAL_TAILSCALE_WAIT"
+  fi
+
+  validation_failed=0
+
+  if [ ! -f "$CONF" ]; then
+    err "Missing subscription config: $CONF"
+    validation_failed=1
+  fi
+
+  if [ ! -x "$UPDATER" ]; then
+    err "Updater is missing or not executable: $UPDATER"
+    validation_failed=1
+  fi
+
+  link_count="$(count_main_supported_links)"
+  if [ "${link_count:-0}" -lt 1 ]; then
+    err "podkop.main.urltest_proxy_links has no vless://, ss://, or trojan:// links."
+    validation_failed=1
+  fi
+
+  if ! pgrep -x sing-box >/dev/null 2>&1; then
+    err "sing-box process is not running."
+    validation_failed=1
+  fi
+
+  if [ "$ENABLE_TAILSCALE" != "1" ]; then
+    warn "ENABLE_TAILSCALE=0. Skipping final Tailscale validation."
+  elif command -v tailscale >/dev/null 2>&1; then
+    ts_hostname="${TAILSCALE_HOSTNAME_SAFE:-}"
+    [ -n "$ts_hostname" ] || ts_hostname="${ROUTER_NAME_SAFE:-openwrt-router}"
+    ts_status="$(tailscale status 2>/dev/null || true)"
+    self_line="$(printf '%s\n' "$ts_status" | grep -i "[[:space:]]${ts_hostname}[[:space:]]" | head -n 1 || true)"
+
+    if [ -n "$self_line" ] && printf '%s\n' "$self_line" | grep -qi 'offline'; then
+      err "Tailscale status reports current hostname offline: $ts_hostname"
+      validation_failed=1
+    elif [ -z "$ts_status" ] && pgrep -af tailscaled >/dev/null 2>&1; then
+      err "tailscale status is empty while tailscaled is running."
+      validation_failed=1
+    fi
+  else
+    err "tailscale command is missing while ENABLE_TAILSCALE=1."
+    validation_failed=1
+  fi
+
+  if [ "$validation_failed" -ne 0 ]; then
+    err "Bootstrap validation failed after delayed Tailscale check."
+    bootstrap_validation_diagnostics
+    exit 1
+  fi
+
+  echo "[OK] Bootstrap validation passed."
 }
 
 final_report() {
@@ -1340,12 +1579,15 @@ make_backup
 configure_openwrt_hostname
 install_dependencies
 setup_tailscale
+configure_dropbear_tailscale_access
 setup_podkop
 if write_subscription_config; then
   install_updater_and_cron
   run_subscription_update
+  apply_podkop_protection
 fi
 install_ttyd_optional
+validate_bootstrap_success
 final_report
 reboot_requirement
 BOOTSTRAP_COMPLETED=1

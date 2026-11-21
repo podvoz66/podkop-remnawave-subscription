@@ -4,17 +4,26 @@ set -eu
 REPO_RAW_BASE="${REPO_RAW_BASE:-https://raw.githubusercontent.com/podvoz66/podkop-remnawave-subscription/main}"
 REPO_UPDATER_URL="$REPO_RAW_BASE/scripts/update-podkop-from-remnawave.sh"
 REPO_GUARD_URL="$REPO_RAW_BASE/scripts/podkop-all-lists-guard.sh"
+REPO_OUTPUT_BYPASS_URL="$REPO_RAW_BASE/scripts/apply-podkop-router-output-bypass.sh"
+REPO_TAILSCALE_PROTECT_URL="$REPO_RAW_BASE/scripts/podkop-tailscale-protect.sh"
+REPO_VALIDATOR_URL="$REPO_RAW_BASE/scripts/validate-openwrt-router.sh"
 PODKOP_INSTALL_URL="https://raw.githubusercontent.com/itdoginfo/podkop/main/install.sh"
 
 APP_DIR="/etc/podkop-remnawave"
 CONF="$APP_DIR/subscription.conf"
 UPDATER="/usr/bin/update-podkop-from-remnawave.sh"
+OUTPUT_BYPASS="/root/apply-podkop-router-output-bypass.sh"
+TAILSCALE_PROTECT="/usr/bin/podkop-tailscale-protect.sh"
+VALIDATOR="/usr/bin/validate-openwrt-router.sh"
 GUARD_BIN="/usr/bin/podkop-all-lists-guard.sh"
 GUARD_DIR="/etc/podkop-guard"
 GUARD_CACHE_DIR="$GUARD_DIR/cache"
 GUARD_URLS="$GUARD_DIR/urls.txt"
 LOG="/tmp/podkop-sub-update.log"
 CRON_LINE="0 */4 * * * /usr/bin/update-podkop-from-remnawave.sh >/tmp/podkop-sub-update.log 2>&1"
+BYPASS_CRON="* * * * * /root/apply-podkop-router-output-bypass.sh >/tmp/podkop-router-output-bypass.log 2>&1"
+TAILSCALE_PROTECT_CRON="* * * * * /usr/bin/podkop-tailscale-protect.sh >/tmp/podkop-tailscale-protect.log 2>&1"
+PODKOP_LIST_UPDATE_CRON="13 9 * * * /usr/bin/podkop list_update"
 GUARD_APPLY_CRON="*/2 * * * * /usr/bin/podkop-all-lists-guard.sh --apply >/tmp/podkop-all-lists-guard-apply.log 2>&1"
 GUARD_REFRESH_CRON="17 */6 * * * /usr/bin/podkop-all-lists-guard.sh --refresh >/tmp/podkop-all-lists-guard-refresh.log 2>&1"
 
@@ -123,6 +132,23 @@ check_required_runtime_commands() {
   fi
 }
 
+print_link_hash_summary() {
+  section="$1"
+  uci -q get "podkop.${section}.urltest_proxy_links" 2>/dev/null \
+    | tr ' ' '\n' \
+    | grep -E '^(vless|ss|trojan|hysteria2|hy2)://' \
+    | awk '
+        function proto(v) { sub("://.*", "", v); return v }
+        {
+          q = "'\''"
+          cmd = "printf %s " q $0 q " | sha256sum"
+          cmd | getline h
+          close(cmd)
+          split(h, a, " ")
+          print "index=" NR " protocol=" proto($0) " hash=" substr(a[1], 1, 12)
+        }' || true
+}
+
 install_subnet_guard() {
   echo
   echo "[STEP] Installing Podkop subnet guard..."
@@ -137,6 +163,30 @@ install_subnet_guard() {
 
   "$GUARD_BIN" --refresh || true
   "$GUARD_BIN" --apply || true
+}
+
+install_protection_helpers() {
+  echo
+  echo "[STEP] Installing Podkop/Tailscale protection helpers..."
+
+  fetch "$REPO_OUTPUT_BYPASS_URL" "$OUTPUT_BYPASS"
+  chmod 700 "$OUTPUT_BYPASS"
+  fetch "$REPO_TAILSCALE_PROTECT_URL" "$TAILSCALE_PROTECT"
+  chmod 700 "$TAILSCALE_PROTECT"
+  fetch "$REPO_VALIDATOR_URL" "$VALIDATOR"
+  chmod 700 "$VALIDATOR"
+}
+
+normalize_root_cron() {
+  tmp="/tmp/root.cron.$$"
+
+  grep -Ev 'update-podkop-from-remnawave\.sh|apply-podkop-router-output-bypass\.sh|podkop-tailscale-protect\.sh|/usr/bin/podkop list_update' /etc/crontabs/root 2>/dev/null > "$tmp" || true
+  echo '0 */4 * * * /usr/bin/update-podkop-from-remnawave.sh >/tmp/podkop-sub-update.log 2>&1' >> "$tmp"
+  echo '* * * * * /root/apply-podkop-router-output-bypass.sh >/tmp/podkop-router-output-bypass.log 2>&1' >> "$tmp"
+  echo '* * * * * /usr/bin/podkop-tailscale-protect.sh >/tmp/podkop-tailscale-protect.log 2>&1' >> "$tmp"
+  echo '13 9 * * * /usr/bin/podkop list_update' >> "$tmp"
+  cat "$tmp" > /etc/crontabs/root
+  rm -f "$tmp"
 }
 
 read_from_tty() {
@@ -257,6 +307,8 @@ cp /etc/config/podkop "$APP_DIR/backups/podkop.config.backup.$STAMP"
 
 cat >"$CONF" <<EOF
 SUB_URL='$REMNA_SUB_URL'
+PRESERVE_MANUAL_LINKS='0'
+DENYLIST_SHA256=''
 EOF
 
 chmod 600 "$CONF"
@@ -292,14 +344,12 @@ else
 fi
 
 install_subnet_guard
+install_protection_helpers
 
 echo
 echo "[STEP] Installing cron job..."
 
-grep -v 'update-podkop-from-remnawave.sh' /etc/crontabs/root 2>/dev/null > /tmp/root.cron.$$ || true
-echo "$CRON_LINE" >> /tmp/root.cron.$$
-cat /tmp/root.cron.$$ > /etc/crontabs/root
-rm -f /tmp/root.cron.$$
+normalize_root_cron
 
 /etc/init.d/cron restart || true
 
@@ -327,11 +377,11 @@ netstat -lntup 2>/dev/null | grep -E '1602|9090|sing|podkop' || true
 
 echo
 echo "[INFO] Podkop main links:"
-uci show podkop.main 2>/dev/null | grep 'urltest_proxy_links' || true
+print_link_hash_summary main
 
 echo
 echo "[INFO] Podkop USA links, if section exists:"
-uci show podkop.USA 2>/dev/null | grep 'urltest_proxy_links' || true
+print_link_hash_summary USA
 
 echo
 echo "[INFO] cron:"
