@@ -41,8 +41,8 @@ Root-диагностика подтвердила extra-storage на отдел
    stream, server, addr.type=unix, addr.path; проверить поддержку custom args
    установленной PVE. Подготовить два отдельных endpoint пути под root0700 /run.
    Оба LAB соединяются только друг с другом, никакого host TCP listener/bridge/NAT.
-3. Создать выключенные LAB203 OpenWrt и LAB204 Linux: каждому1vCPU/1GiB/новый4GiB
-   диск extra-storage, onboot=0, serial console; первоначально без NIC и custom args.
+3. Создать выключенные LAB203 OpenWrt и LAB204 Linux: каждому1vCPU/1GiB, БЕЗ пустых дисков,
+   onboot=0, serial console; первоначально без NIC и custom args.
    Резерв32GiB. Это будущие изменения, сейчас НЕ разрешены и НЕ выполнялись.
 4. Добавить только LAB custom QEMU args: две пары virtio NIC + stream Unix endpoints
    lab-lan/lab-wan, VM204 server, VM203 client. ID netdev/device уникальны внутри VM;
@@ -249,3 +249,68 @@ VMID не зарезервированы; QGA отсутствует, serial rec
 credential; нет сетевого стенда и измеренного offline recovery; остановка202 не разрешена;
 не доказана загрузка production rescue; нет подтверждённого физического router/OOB.
 Отказ самого PVE/питания/ISP вариант B не исправляет. PR7 остаётся Draft/NO-GO.
+
+## Исправленный порядок образов и дисков (команды НЕ выполнялись)
+
+Создавать VM без пустого scsi0; только проверенный импорт назначается boot-диском.
+Прежние предложения extra-storage:4 при create отменены. Размер импортированного
+диска определяется образом; расширение до4GiB и guest filesystem — отдельный этап.
+Локальный Debian QCOW2 с SHA256 d4167ef1f3c94ed2d20a022c4fb1487aa7743639408d8d4ff765e26ad229b7bc
+не подтверждён и НЕ используется.
+
+Закреплён Debian12 genericcloud amd64 сборки20261117-2665:
+[официальный SHA512SUMS](https://cloud.debian.org/images/cloud/bookworm/20261117-2665/SHA512SUMS).
+Полное имя debian-12-genericcloud-amd64-20261117-2665.qcow2, SHA512:
+946b917a37882f16e5b3b0b2cbe5744637d0cd36190b5b53cbb21d14a54557d5b45e9e523021b8f52c1707dbe470489f3515458e0680ded76ee2574b4a8daf1b.
+latest не использовать. Manifest прочитан, образ не скачивался.
+OpenWrt25.12.4 x86-64 generic-ext4-combined.img.gz (BIOS), SHA256:
+9d080bcae28d7cdf86dabb4b29c10d36d89e0bd79e20a4799454380bc1619695.
+[Официальный manifest](https://downloads.openwrt.org/releases/25.12.4/targets/x86/64/sha256sums).
+
+Будущая загрузка в новый staging после отдельного согласования:
+
+```bash
+set -euo pipefail
+stage=$(mktemp -d /var/lib/vz/r12-images.XXXXXXXX)
+cd "$stage"
+ow=openwrt-25.12.4-x86-64-generic-ext4-combined.img.gz
+db=debian-12-genericcloud-amd64-20261117-2665.qcow2
+curl --fail --location --proto '=https' --proto-redir '=https' -o "$ow.part" "https://downloads.openwrt.org/releases/25.12.4/targets/x86/64/$ow"
+printf '%s  %s\n' 9d080bcae28d7cdf86dabb4b29c10d36d89e0bd79e20a4799454380bc1619695 "$ow.part" | sha256sum -c -
+mv "$ow.part" "$ow"
+curl --fail --location --proto '=https' --proto-redir '=https' -o "$db.part" "https://cloud.debian.org/images/cloud/bookworm/20261117-2665/$db"
+printf '%s  %s\n' 946b917a37882f16e5b3b0b2cbe5744637d0cd36190b5b53cbb21d14a54557d5b45e9e523021b8f52c1707dbe470489f3515458e0680ded76ee2574b4a8daf1b "$db.part" | sha512sum -c -
+mv "$db.part" "$db"
+gzip -t "$ow"
+gzip -dc "$ow" > openwrt.img
+qemu-img info --output=json openwrt.img
+qemu-img info --output=json "$db"
+```
+
+STOP: checksum mismatch, неожиданный формат/backing file, занятый ID, не stopped.
+GO после отдельного разрешения создания, проверки образов и свободных ID:
+
+```bash
+qm create 203 --name LAB203-OpenWrt --memory 1024 --cores 1 --cpulimit 0.5 --onboot 0 --scsihw virtio-scsi-pci --serial0 socket --vga serial0
+qm create 204 --name LAB204-Fixture --memory 1024 --cores 1 --cpulimit 0.5 --onboot 0 --scsihw virtio-scsi-pci --serial0 socket --vga serial0
+qm disk import 203 "$stage/openwrt.img" extra-storage --format raw
+qm disk import 204 "$stage/$db" extra-storage --format raw
+qm config 203
+qm config 204
+```
+
+Проверить ровно один unused0 у каждой новой VM и отсутствие scsi0/netN/args.
+Назначать только фактический volume ID, возвращённый импортом, не угадывать номер диска:
+
+```bash
+# Подставить проверенные volume ID из unused0; НЕ выполнять с placeholders.
+qm set 203 --scsi0 'extra-storage:ACTUAL_IMPORTED_VOLUME_203' --boot order=scsi0
+qm set 204 --scsi0 'extra-storage:ACTUAL_IMPORTED_VOLUME_204' --boot order=scsi0
+for id in 203 204; do qm status "$id"; qm config "$id"; qm showcmd "$id" --pretty; done
+```
+
+GO: stopped/onboot0, scsi0 — именно проверенный импорт, boot=scsi0, нет NIC/netN/args,
+production bridge/TAP/NAT/passthrough. До отдельного сетевого этапа Unix args не добавлять.
+Cloud image не гарантирует console login/готовность fixture: offline подготовка доступа,
+serial и инструментов требует отдельного плана; не подключать production NIC для обхода.
+Ни одна команда загрузки/create/import/set/start сейчас не выполнялась.
