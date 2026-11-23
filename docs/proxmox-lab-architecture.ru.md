@@ -5,7 +5,52 @@ VM202 работает и не изменялась; VM201 не использо
 clone, snapshot, restore, start/stop/reboot, установка пакетов, изменение bridge,
 firewall, routing, SSH, ключей или systemd. Тесты повторно не запускались.
 
-## Подтверждено текущим SSH
+## Дополнение: root Shell владельца, 23.11.2026
+
+Источник — предоставленный владельцем вывод read-only команд; агент root-команды
+не выполнял. Эти сведения заменяют прежние отметки «не проверено» ниже.
+
+- VM202: boot=c, RAM512MiB; scsi0=local-lvm:vm-202-disk-0,size=2G,
+  scsihw=virtio-scsi-pci. net0=virtio/vmbr0 (LAN), net1=e1000/vmbr1 (WAN).
+- QGA: «No QEMU guest agent configured», exit255. Это отсутствие настройки,
+  не доказательство зависания гостя. Не использовать QGA как доступный recovery path.
+- serial0=socket; /run/qemu-server/202.serial0 существует root:root0750.
+  Наличие socket не доказывает guest getty, авторизацию или восстановление kernel.
+- Cluster nextid=108; явные запросы VMID203 и204 вернули203/204: свободны на момент
+  проверки, НЕ зарезервированы. Перед будущим созданием проверить повторно.
+- local-lvm/pve:data и extra-storage/extra-storage:nvme-pool разрешают images/rootdir.
+  local разрешает только vztmpl,iso,import,backup; backups-seagate — только backup.
+- Последующая root-диагностика владельца: extra-storage Data9,62%, Meta13,90%, rw;
+  local-lvm Data58,72%, Meta2,37%, rw. BLOCKER по заполнению/доступности LVM снят.
+- pve-cluster active, одиночный Proxmox: кластерный quorum не является отдельным
+  препятствием стенду. Это не испытание потери WAN или отказа host storage.
+
+**До разрешения на создание LAB — STOP:** осталось установить физическое backing
+extra-storage и проверить установленный QEMU/PVE Unix-socket backend. Ресурсы:
+203=OpenWrt1vCPU/1GiB/4GiB,204=fixture1vCPU/1GiB/4GiB, резерв32GiB extra-storage.
+Снятие LVM gate не разрешает создание VM и не подтверждает автономный recovery.
+
+### Минимальная оставшаяся read-only проверка (root Shell владельца)
+
+```sh
+pvs --readonly -o pv_name,vg_name,pv_size,pv_free --select 'vg_name=extra-storage'
+lsblk -e 7 -o NAME,TYPE,SIZE,MODEL,TRAN,PKNAME,MOUNTPOINTS
+qemu-system-x86_64 --version
+qemu-system-x86_64 -netdev help
+```
+
+PV→lsblk→parent disk позволяет установить физическое backing без чтения данных,
+серийных номеров и UUID. Если PV находится на dm/md, проследить всю цепочку parents;
+название VG не доказывает отдельный физический диск или failure domain.
+QEMU help подтверждает только наличие stream/socket backend, не Unix-синтаксис и
+не корректность PVE args. Следующий безопасный шаг — сверить установленную локальную
+man qemu-system-x86_64 (разделы netdev stream/socket, addr.type=unix) с этой версией.
+Не запускать QEMU с socket/listener, не создавать dummy VM для проверки. До разрешённого
+LAB фактическая интеграция остаётся UNVERIFIED; qm showcmd возможен лишь после отдельного
+разрешения создать изолированную конфигурацию LAB. Отсутствие stream или Unix support
+означает STOP, без подмены на production bridge.
+
+## Подтверждено предыдущим SSH
 
 | Объект | Результат |
 |---|---|
@@ -14,7 +59,7 @@ firewall, routing, SSH, ключей или systemd. Тесты повторно
 | KVM / QEMU | /dev/kvm присутствует; qemu-system-x86_64/kvm/qemu-img установлены. codexops не может использовать KVM напрямую |
 | VM | 100 HAOS running8192MiB; 201 OpenWrt stopped512MiB; 202 OpenWrt running512MiB/2GiB |
 | CT | 101–107 running, включая107 tailscale-bastion |
-| Кандидаты VMID | 203/204 отсутствуют в текущем локальном qm/pct inventory; НЕ зарезервированы, cluster nextid не получен |
+| Кандидаты VMID | 203/204 подтверждены свободными root API на момент проверки; НЕ зарезервированы |
 | extra-storage | active lvmthin; Available903760666KiB ≈862GiB |
 | local-lvm | active lvmthin; Available150985939KiB ≈144GiB |
 | local | active dir; Available55634572KiB ≈53GiB, /var/lib/vz на root ext4 |
@@ -84,7 +129,7 @@ VM201 не используется. Ресурсы-кандидаты:
 - VM204 fixture Linux: 1vCPU, 1024MiB, новый диск4GiB; DNS/HTTP/HTTPS origins,
   синтетический VPN endpoint и LAN client внутри разных network namespaces.
 - Резерв32GiB thin-pool под образы, чистый baseline, fault disks и повторные прогоны.
-  Content=images/metadata и свободные VMID надо подтвердить до allocation.
+  Content=images и свободные VMID подтверждены; LVM gate снят по root-диагностике владельца.
 - Лимит CPU каждой тестовой VM0.5 CPU, суммарно≤1 CPU; небольшие I/O limits только
   тестовых дисков. Ресурсы/приоритет VM202 не менять; отложить запуск при нагрузке.
 
@@ -167,8 +212,8 @@ switch + boot + LAN приёмка. Сейчас нет оснований об�
 
 ## Испытания и этапы: STOP/GO
 
-1. **RO gate (сейчас STOP):** получить недостающие root read-only сведения, проверить
-   локальность storage, свободные ID, PVE control/quorum и QGA/serial. Запусков нет.
+1. **RO gate (сейчас STOP):** LVM и singleton PVE подтверждены; осталось проверить
+   физическое backing storage и Unix-socket совместимость. ID проверять перед allocation. Запусков нет.
 2. **Отдельное разрешение LAB:** создать только203/204 с fresh disks и без NIC;
    проверить custom QEMU Unix backend/no-leak до подключения lab NIC. Затем DNS,
    DHCP и реальный HTTP/HTTPS транзит между двумя fixture namespaces.
@@ -183,8 +228,8 @@ switch + boot + LAN приёмка. Сейчас нет оснований об�
 5. **Fail-Open — отдельное разрешение:** только после принятого независимого B recovery,
    конкретного downtime budget, armed host deadline и приёмочного протокола.
 
-BLOCKER: недостаточные read-only/root права; не проверены VM202 config/agent/serial,
-VMID reservation/thin metadata/image content/local backup; нет принятого live host→guest
+BLOCKER: физическое backing extra-storage/backup и Unix-socket интеграция PVE не проверены;
+VMID не зарезервированы; QGA отсутствует, serial recovery не испытан; нет принятого live host→guest
 credential; нет сетевого стенда и измеренного offline recovery; остановка202 не разрешена;
 не доказана загрузка production rescue; нет подтверждённого физического router/OOB.
 Отказ самого PVE/питания/ISP вариант B не исправляет. PR7 остаётся Draft/NO-GO.
