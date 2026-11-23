@@ -25,3 +25,12 @@ proxmox-cloud → codexops: inventory доступен; VM config/QGA/root socke
 host key; auth не проверен. Стенд — только clean203/204 кандидаты и Unix sockets,
 без host bridges/NAT. B offline disk recovery пока только архитектура; A не лечит
 полный отказ guest kernel. Никаких production изменений/новых механизмов до RO gate.
+
+## Актуально после Stage6
+Предыдущие STOP/исторические статусы выше заменены новым этапом:
+[Stage6 live PASS и rollback](../../docs/lab-stage6.ru.md),
+[Stage7 план, ещё не выполнен](../../docs/lab-stage7-plan.ru.md).
+LAB203/204 running, restricted wrapper установлен. В203 Stage5 адреса, firewall/DNS
+не менялись; в204 работают fixture и узкий host-route. Stage6 rollback в204 автономен.
+Нет установленных Podkop/sing-box/curl203; требуется офлайн подготовка. Full guest
+host disk recovery ещё BLOCKER. Production NO-GO, wrapper202 запрещён sudo.
