@@ -11,6 +11,7 @@ def serve(directory):
                 log.write(json.dumps({'time':time.time(),'path':path,'peer':self.client_address[0]})+'\n')
             if path=='/probe64k': body=b'R'*65536
             elif path=='/subscription/valid': body=(root/'subscription.txt').read_bytes()
+            elif path=='/subscription/main-only': body=(root/'subscription.txt').read_bytes().splitlines()[0]+b'\n'
             elif path=='/subscription/empty': body=b''
             elif path=='/subscription/malformed': body=b'<html>invalid subscription</html>'
             elif path=='/subscription/500': self.send_error(500); return

@@ -1,0 +1,215 @@
+{
+  "scope": "LAB203/204 changes only; VM202 passive observer only; production deployment NO-GO",
+  "date_utc": "2026-11-23",
+  "date_local": "2026-11-24 Asia/Yekaterinburg",
+  "versions": {
+    "openwrt": "25.12.4",
+    "podkop": "0.7.24",
+    "lab_engine": "slim 1.14.4-r28",
+    "sing_box": "1.14.4-pdk-r28",
+    "production_engine": "full; not installed by this task"
+  },
+  "tests": {
+    "negative": "NEGATIVE_empty=REJECTED_CONFIG_UNCHANGED\nNEGATIVE_main-only=REJECTED_CONFIG_UNCHANGED\nNEGATIVE_500=REJECTED_CONFIG_UNCHANGED\nNEGATIVE_timeout=REJECTED_CONFIG_UNCHANGED\nR12_GUEST_RC=0",
+    "concurrent": "CONCURRENT_SECOND_RC75_FIRST_DOWNLOAD_REJECTED\nR12_GUEST_RC=0",
+    "rollback_post_rename": "NATIVE_POST_RENAME_FAILURE_ROLLBACK_CONFIG_RESTORED_CLIENT_PROBE_REQUIRED\nR12_GUEST_RC=0",
+    "final_acceptance": "FINAL_MAIN_USA_2_MANUAL_PRESENT_MANAGED_1_PREVIOUS_GOOD_SHA_PASS\nTWO_SHADOW_HTTP_PASSES_NO_ORPHAN\nUNCHANGED_SUBSCRIPTION_CONFIG_AND_PID_PRESERVED\nFINAL_SUBSCRIPTION_LOCK_FREE\nR12_GUEST_RC=0"
+  },
+  "client_receipts": {
+    "after_apply": [
+      {
+        "id": "native-apply-positive",
+        "expected_path": "VPN",
+        "time": 1795469278.469265,
+        "dns_udp": "198.18.0.3",
+        "dns_tcp": "198.18.0.4",
+        "upstream_dns_udp_tcp": [
+          "10.253.203.1",
+          "10.253.203.1"
+        ],
+        "http": {
+          "status": 200,
+          "peer": "10.253.203.1",
+          "tls_verified": false
+        },
+        "https": {
+          "status": 200,
+          "peer": "10.253.203.1",
+          "tls_verified": true
+        },
+        "result": "PASS"
+      }
+    ],
+    "after_rollback": [
+      {
+        "id": "native-rollback-debug",
+        "expected_path": "VPN",
+        "time": 1795469532.545767,
+        "dns_udp": "10.253.203.1",
+        "dns_tcp": "10.253.203.1",
+        "upstream_dns_udp_tcp": [
+          "10.253.203.1",
+          "10.253.203.1"
+        ],
+        "http": {
+          "status": 200,
+          "peer": "10.253.203.1",
+          "tls_verified": false
+        },
+        "https": {
+          "status": 200,
+          "peer": "10.253.203.1",
+          "tls_verified": true
+        },
+        "result": "PASS"
+      }
+    ],
+    "direct_while_podkop_and_ssh_stopped": [
+      {
+        "id": "host-timer-before-recovery",
+        "expected_path": "DIRECT",
+        "time": 1795469342.6417785,
+        "dns_udp": "10.253.203.1",
+        "dns_tcp": "10.253.203.1",
+        "upstream_dns_udp_tcp": [
+          "10.253.203.1",
+          "10.253.203.1"
+        ],
+        "http": {
+          "status": 200,
+          "peer": "10.253.203.2",
+          "tls_verified": false
+        },
+        "https": {
+          "status": 200,
+          "peer": "10.253.203.2",
+          "tls_verified": true
+        },
+        "result": "PASS"
+      }
+    ],
+    "vpn_after_host_timer": [
+      {
+        "id": "host-timer-after-recovery",
+        "expected_path": "VPN",
+        "time": 1795469388.0382833,
+        "dns_udp": "198.18.0.3",
+        "dns_tcp": "198.18.0.4",
+        "upstream_dns_udp_tcp": [
+          "10.253.203.1",
+          "10.253.203.1"
+        ],
+        "http": {
+          "status": 200,
+          "peer": "10.253.203.1",
+          "tls_verified": false
+        },
+        "https": {
+          "status": 200,
+          "peer": "10.253.203.1",
+          "tls_verified": true
+        },
+        "result": "PASS"
+      }
+    ],
+    "final": [
+      {
+        "id": "native-final-accepted",
+        "expected_path": "VPN",
+        "time": 1795470362.8055713,
+        "dns_udp": "198.18.0.3",
+        "dns_tcp": "198.18.0.4",
+        "upstream_dns_udp_tcp": [
+          "10.253.203.1",
+          "10.253.203.1"
+        ],
+        "http": {
+          "status": 200,
+          "peer": "10.253.203.1",
+          "tls_verified": false
+        },
+        "https": {
+          "status": 200,
+          "peer": "10.253.203.1",
+          "tls_verified": true
+        },
+        "result": "PASS"
+      }
+    ]
+  },
+  "host_timer": {
+    "implementation": "temporary unprivileged codexops monotonic detached process, not root systemd service",
+    "probe": {
+      "phase": "COMMAND_DONE",
+      "deadline": 834017.582018196,
+      "operation": "probe",
+      "sha256": "4ec631548ac6512f130702dfa6f736e3c995d1cb7d957f0c93c550538484fb87",
+      "guest_rc": 0,
+      "finished_utc": "2026-11-23T21:05:32Z"
+    },
+    "recovery": {
+      "phase": "COMMAND_DONE",
+      "deadline": 835446.051410744,
+      "operation": "restore",
+      "sha256": "db1fd1b90d275633aae5266d238a76890bb0448f64e47884dfaf0ed3f0d3966b",
+      "guest_rc": 0,
+      "finished_utc": "2026-11-23T21:29:25Z"
+    },
+    "guest_stop": "LAB203_PODKOP_AND_GUEST_SSH_STOPPED_WAITING_FOR_HOST_TIMER\nR12_GUEST_RC=0",
+    "guest_verify": "WARN[0000] `independent_cache` DNS option is deprecated in sing-box 1.14.0 and will be removed in sing-box 1.16.0, checkout documentation for migration: https://sing-box.sagernet.org/migration/#migrate-independent-dns-cache\nSUBSCRIPTION_LOCK_FREE_AFTER_RECOVERY\nCONTROL_LOCK_FREE_AFTER_RECOVERY\nHOST_TIMER_RESTORED_GUEST_SSH_CONFIG_UNCHANGED_NO_EXTERNAL_DEFAULT\nR12_GUEST_RC=0",
+    "cancel": {
+      "phase": "CANCELLED",
+      "deadline": 835588.593102673,
+      "operation": "probe",
+      "sha256": "db1fd1b90d275633aae5266d238a76890bb0448f64e47884dfaf0ed3f0d3966b"
+    },
+    "bounds": [
+      "guest SSH not needed; serial root shell and kernel required",
+      "native restore needs procd",
+      "host reboot/process kill not covered",
+      "kernel/boot/disk recovery NOT PROVEN; no root capability installed"
+    ]
+  },
+  "regressions": {
+    "native_state_fd_readiness_ownership": "PASS",
+    "shadow_nested_exit_cleanup": "PASS",
+    "node_tests": "11/11 PASS outside child-process EPERM sandbox",
+    "bootstrap_static": "WARNING: baseline 014e688 already counted five LAB-only runtime commands; no blanket all-tests-green claim"
+  },
+  "failed_iterations": [
+    {
+      "issue": "Immediate native readiness and shutdown_correctly bytewise comparison",
+      "resolution": "bounded config/PID/DNS readiness and compare all UCI keys except native runtime shutdown_correctly"
+    },
+    {
+      "issue": "Probe child inherited subscription fd and orphan probe occupied fixed ports",
+      "resolution": "close FDs; explicit success/error/signal cleanup; actual rollback followed by two probes and no orphan"
+    },
+    {
+      "issue": "Nested EXIT health cleanup suppressed inside outer rollback EXIT",
+      "proof": "/root/r12-native-test/shared.new: OK\nOUTER_EXIT_TRAP_DONE\nR12_GUEST_RC=0",
+      "resolution": "explicit cleanup independent of nested EXIT traps; local lifecycle regression PASS"
+    },
+    {
+      "issue": "Intermediate combined positive assertions failed without captured exact rc",
+      "resolution": "subsequent exact updater RC0 commit, read-only counts/snapshot SHA, no-op PID and free-lock acceptance; intermediate failures are not counted as PASS"
+    }
+  ],
+  "source_sha256": {
+    "scripts/update-podkop-from-remnawave.sh": "94a0e3e1b4bee030f0ffa6b80c24c073e436deec9a0ade4fdcc661cfc6978845",
+    "scripts/podkop-native-update-lib.sh": "68d6fe076990653da5058818d4e6dd29c88dfae3c26327e597607b37053fb6fa",
+    "scripts/podkop-failover-lib.sh": "d147e65c273e2234b3c2b9637da1c8c2c2428afa9277afff567bbfcf9079e85d",
+    "scripts/lab/r12-native-updater-cases203.sh": "da6963b36813551fb211502f120c0409ffcd2425754d3e391de767ece7053d8f",
+    "scripts/lab/r12-native-timer-restore203.sh": "db1fd1b90d275633aae5266d238a76890bb0448f64e47884dfaf0ed3f0d3966b",
+    "scripts/lab/r12-pve-user-timer203.py": "4d8711ca1d1d9af54732a5984b45ffd80d7f61b248321e2df35d0c57052673e5",
+    "scripts/monitor-urltest-readonly.mjs": "f81b0f3389d2488f7d703abcf5b28a970445c27aada67e7a56d9b5d60ac09dc5",
+    "scripts/summarize-urltest-readonly.mjs": "a76367d42153f8b87bccb47caba06769c2d4db67dfbd362a38a9783c3c1f610f"
+  },
+  "offline_delivery": {
+    "path": "/tmp/r12-bulk-9eeeb52eff86e6f8614f8c04348fa9575267f765ef07fdb6a620514e1171e77b",
+    "bytes": 51200,
+    "sha256": "9eeeb52eff86e6f8614f8c04348fa9575267f765ef07fdb6a620514e1171e77b",
+    "verified": true,
+    "guest_verification": "/tmp/r12-bulk-9eeeb52eff86e6f8614f8c04348fa9575267f765ef07fdb6a620514e1171e77b: OK\npodkop-failover-lib.sh: OK\npodkop-native-update-lib.sh: OK\nr12-native-timer-restore203.sh: OK\nr12-native-updater-cases203.sh: OK\nupdate-podkop-from-remnawave.sh: OK\nFINAL_RELEASE_ASSETS_PRESERVED_WITHOUT_RESTART\nR12_GUEST_RC=0"
+  }
+}

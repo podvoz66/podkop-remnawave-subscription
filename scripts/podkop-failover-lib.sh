@@ -134,23 +134,44 @@ shadow_health() (
     validate_sections "$sh_dir" || exit 1
     sh_work=$(mktemp -d "$RUN/probe.XXXXXX") || exit 1
     sh_pid=''
-    trap '[ -z "$sh_pid" ] || { kill "$sh_pid" 2>/dev/null || :; kill -KILL "$sh_pid" 2>/dev/null || :; wait "$sh_pid" 2>/dev/null || :; }; rm -rf "$sh_work"' EXIT
-    trap 'exit 130' INT
-    trap 'exit 143' TERM
-    make_probe_config "$sh_dir" "$sh_work/config.json" >/dev/null 2>&1 || exit 1
-    # HTTP probes have curl deadlines; own the real sing-box PID for cleanup.
-    sing-box run -c "$sh_work/config.json" -D "$sh_work" >/dev/null 2>&1 9>&- &
+    shadow_cleanup() {
+        if [ -n "$sh_pid" ]; then
+            kill "$sh_pid" 2>/dev/null || :
+            kill -KILL "$sh_pid" 2>/dev/null || :
+            wait "$sh_pid" 2>/dev/null || :
+            sh_pid=''
+        fi
+        rm -rf "$sh_work"
+    }
+    trap 'shadow_cleanup' EXIT
+    trap 'shadow_cleanup; trap - EXIT; exit 130' INT
+    trap 'shadow_cleanup; trap - EXIT; exit 143' TERM
+    # Rollback calls us from an EXIT trap: nested EXIT traps may be suppressed.
+    # Every normal/error return therefore performs cleanup explicitly.
+    if ! make_probe_config "$sh_dir" "$sh_work/config.json" >/dev/null 2>&1; then
+        shadow_cleanup; trap - EXIT; exit 1
+    fi
+    sing-box run -c "$sh_work/config.json" -D "$sh_work" >/dev/null 2>&1 9>&- 8>&- 7>&- 6>&- &
     sh_pid=$!
     sleep 1
-    kill -0 "$sh_pid" 2>/dev/null || exit 1
-    if ! http_via 17890; then printf 'UNREACHABLE\n' > "$RUN/wan"; exit 1; fi
-    printf 'OK\n' > "$RUN/wan"
-    sh_port=17890
-    for sh_sec in $REQUIRED_SECTIONS; do
-        sh_port=$((sh_port+1))
-        http_via "$sh_port" || exit 1
-    done
+    sh_result=0
+    if ! kill -0 "$sh_pid" 2>/dev/null || ! http_via 17890; then
+        printf 'UNREACHABLE\n' > "$RUN/wan"
+        sh_result=1
+    else
+        printf 'OK\n' > "$RUN/wan"
+        sh_port=17890
+        for sh_sec in $REQUIRED_SECTIONS; do
+            sh_port=$((sh_port+1))
+            if ! http_via "$sh_port"; then sh_result=1; break; fi
+        done
+    fi
+    kill -0 "$sh_pid" 2>/dev/null || sh_result=1
+    shadow_cleanup
+    trap - EXIT
+    exit "$sh_result"
 )
+
 api_health() {
     ah_tag=$1
     for ah_url in $PROBE_URLS; do

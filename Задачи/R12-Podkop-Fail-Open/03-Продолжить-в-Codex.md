@@ -1,3 +1,22 @@
+## Checkpoint выполненного задания — 24.11 native updater / LAB deadline
+
+[Результат и GO/STOP](../../docs/native-updater-lab-20261124.ru.md).
+По отдельному текущему запросу владельца выполнена только LAB-разработка updater
+(native0, manual preservation, previous-good, reject empty USA, atomic rollback).
+Required negative/concurrent/rollback и финальные client HTTP/TLS/DNS PASS; см.
+[доказательства](../../docs/evidence/native-updater-lab-20261124.json).
+Найден nested EXIT cleanup leak; явный cleanup + lifecycle regression + no orphan PASS.
+Temporary PVE user timer203: detached/SSH loss/guest SSH STOP recovery PASS;
+**не** root-owned controller и **не** независимый от guest kernel/procd rescue.
+Full host recovery остаётся BLOCKER, capability не установлен. VM202 не меняли;
+не развёртывать updater/guard/cron и не выполнять fault injection без отдельного GO.
+Passive URLTest 50/50 за24.5min: main fresh, USA stale, download64KiB UNOBSERVED.
+Следующий шаг: принять exact production backup/rollback + independent host recovery,
+а не повторять LAB1–6 или автоматически переносить Draft PR7. Предыдущий P0 план
+ниже сохранён; готовность production не заявляется.
+
+---
+
 # R12 — приоритетная точка входа Codex (решение владельца 24.11.2026)
 
 **ВЫПОЛНЯТЬ СНАЧАЛА P0: INDEPENDENT RECOVERY + FAIL-SAFE.**

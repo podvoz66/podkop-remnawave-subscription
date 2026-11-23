@@ -4,13 +4,33 @@ set -u
 DRY_RUN=0
 case "${1:-}" in '') ;; --dry-run) DRY_RUN=1;; *) echo 'Usage: update-podkop-from-remnawave.sh [--dry-run]'; exit 2;; esac
 [ -r "${GUARD_LIB:-/usr/lib/podkop-failover.sh}" ] || {
-    echo 'Updater unavailable: approved Fail-Open migration required; existing keys unchanged' >&2
+    echo 'Updater unavailable: shared health library missing; existing keys unchanged' >&2
     exit 78
 }
 . "${GUARD_LIB:-/usr/lib/podkop-failover.sh}"
 guard_setup
+mode=${UPDATER_MODE:-auto}
+if [ "$mode" = auto ]; then
+    if [ "$(uget "$CFG" podkop.settings.dont_touch_dhcp 2>/dev/null)" = 0 ]; then mode=native; else mode=guard; fi
+fi
+case "$mode" in
+native)
+    . "${NATIVE_LIB:-/usr/lib/podkop-native-update.sh}"
+    native_setup
+    ;;
+guard) ;;
+*) echo 'Update rejected: unsupported ownership mode' >&2; exit 1;;
+esac
 exec 8>"$R/var/lock/podkop-subscription.lock"
 flock -n 8 || exit 75
+if [ "$mode" = native ] && [ -f "$NDATA/pending" ]; then
+    [ "$DRY_RUN" != 1 ] || { echo 'Dry-run rejected: native recovery pending' >&2; exit 1; }
+    lock_control || exit 75
+    native_restore || exit 1
+    # A recovered interrupted transaction is a complete operation, never fetch
+    # and activate another subscription in the same run.
+    exit 0
+fi
 work=$(mktemp -d "$CFG/.subscription.XXXXXX") || exit 1
 trap 'rm -rf "$work"' EXIT
 trap 'exit 130' INT
@@ -71,10 +91,23 @@ while IFS= read -r link; do
 done < "$work/links"
 for section in $REQUIRED_SECTIONS; do
     [ -s "$work/$section.new" ] || die 'Update rejected: required subscription section empty'
+    cp "$work/$section.new" "$work/$section.managed" || die 'Update rejected: ownership staging failed'
     uci -c "$work" -t "$work/.uci" -q show "podkop.$section" >/dev/null 2>&1 || die 'Update rejected: required section missing'
     old=$(uget "$work" "podkop.$section.urltest_proxy_links" 2>/dev/null || true)
+    if [ "$mode" = native ]; then
+        # An identical pre-existing manual link must never be claimed as managed.
+        printf '%s\n' "$old" | tr ' ' '\n' > "$work/$section.old"
+        native_stage_ownership "$work/$section.new" "$work/$section.old" "$NDATA/managed/$section" "$work/$section.managed" || die 'Update rejected: ownership staging failed'
+    fi
     printf '%s\n' "$old" | tr ' ' '\n' | while IFS= read -r link; do
-        case "$link" in ''|*-rwsub|*'#rwsub') continue;; esac
+        [ -n "$link" ] || continue
+        if [ "$mode" = native ]; then
+            # On first use preserve ALL existing links, including manually
+            # labelled rwsub. Only this updater's exact previous snapshot owns links.
+            if [ -f "$NDATA/managed/$section" ] && grep -Fxq -- "$link" "$NDATA/managed/$section"; then continue; fi
+        else
+            case "$link" in *-rwsub|*'#rwsub') continue;; esac
+        fi
         printf '%s\n' "$link"
     done >> "$work/$section.new"
     awk '!seen[$0]++' "$work/$section.new" > "$work/$section.final"
@@ -96,6 +129,10 @@ uci -c "$CFG" -q show podkop > "$work/current.state"
 uci -c "$work" -t "$work/.uci" -q show podkop > "$work/candidate.state"
 if cmp -s "$work/current.state" "$work/candidate.state"; then
     event 'Subscription unchanged: runtime untouched'
+    exit 0
+fi
+if [ "$mode" = native ]; then
+    native_apply || die 'Native update rejected or rolled back; check pending state'
     exit 0
 fi
 [ -f "$DATA/normal-dns/dhcp" ] || die 'Update rejected: run approved guard prepare first'
