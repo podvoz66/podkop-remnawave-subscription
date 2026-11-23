@@ -16,3 +16,12 @@
 5. Сначала review и согласование точного окна/этапа внедрения; доступна Console VM202.
 6. После согласованного внедрения проверить LAN DNS/HTTP/HTTPS, SSH/LuCI, ZeroTier,
    rollback и только затем отдельно согласованную перезагрузку OpenWrt.
+
+## Последняя RO-сверка Proxmox
+
+Читать [факты и архитектуру B](../../docs/proxmox-lab-architecture.ru.md).
+proxmox-cloud → codexops: inventory доступен; VM config/QGA/root sockets закрыты.
+Не использовать guestctl apply/start/reboot. PVE SSH→VM202 остановился на unknown
+host key; auth не проверен. Стенд — только clean203/204 кандидаты и Unix sockets,
+без host bridges/NAT. B offline disk recovery пока только архитектура; A не лечит
+полный отказ guest kernel. Никаких production изменений/новых механизмов до RO gate.
