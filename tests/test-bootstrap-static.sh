@@ -4,6 +4,7 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 BOOTSTRAP="$ROOT/scripts/bootstrap-openwrt-router.sh"
 UPDATER="$ROOT/scripts/update-podkop-from-remnawave.sh"
+FAILOVER_LIB="$ROOT/scripts/podkop-failover-lib.sh"
 SYNC="$ROOT/scripts/sync-podkop-mirror.sh"
 RUNTIME_STATE="$ROOT/scripts/adeptpro-runtime-state.sh"
 RUNTIME_INIT="$ROOT/scripts/adeptpro-runtime-state.init"
@@ -59,7 +60,10 @@ singbox_kill_count=0
 while IFS= read -r script; do
   github_count=$((github_count + $(count_pattern 'github\.com|api\.github\.com|raw\.githubusercontent\.com|objects\.githubusercontent\.com' "$script")))
   cron_4h_count=$((cron_4h_count + $(count_pattern '0[[:space:]]+\*/4[[:space:]]+\*[[:space:]]+\*[[:space:]]+\*' "$script")))
-  podkop_restart_count=$((podkop_restart_count + $(count_pattern '/etc/init\.d/podkop[[:space:]]+(stop|start|restart)|service[[:space:]]+podkop[[:space:]]+(stop|start|restart)' "$script")))
+  # Only the shared, tested failover transaction layer may change Podkop runtime.
+  if [ "$script" != "$FAILOVER_LIB" ]; then
+    podkop_restart_count=$((podkop_restart_count + $(count_pattern '/etc/init\.d/podkop[^[:space:]]*[[:space:]]+(stop|start|restart)|service[[:space:]]+podkop[[:space:]]+(stop|start|restart)' "$script")))
+  fi
   singbox_restart_count=$((singbox_restart_count + $(count_pattern 'sing-box.*restart|restart.*sing-box' "$script")))
   singbox_kill_count=$((singbox_kill_count + $(count_pattern 'killall[[:space:]]+sing-box|kill[[:space:]][^#]*sing-box' "$script")))
 done < "$router_files"
@@ -67,7 +71,7 @@ done < "$router_files"
 echo "ROUTER_GITHUB_DEPENDENCY_COUNT=$github_count"
 [ "$github_count" -eq 0 ] && pass GITHUB_IN_ROUTER_SCRIPTS || fail GITHUB_IN_ROUTER_SCRIPTS
 [ "$cron_4h_count" -eq 0 ] && pass NO_4H_CRON || fail NO_4H_CRON
-echo "PERIODIC_PODKOP_RESTART_COUNT=$podkop_restart_count"
+echo "UNGUARDED_PODKOP_RESTART_COUNT=$podkop_restart_count"
 echo "PERIODIC_SINGBOX_RESTART_COUNT=$singbox_restart_count"
 echo "PERIODIC_SINGBOX_KILL_COUNT=$singbox_kill_count"
 [ "$podkop_restart_count" -eq 0 ] || FAILURES=$((FAILURES + 1))
@@ -99,12 +103,13 @@ expect_pattern PODKOP_RU_NONINTERACTIVE 'PODKOP_RU=AUTO' "$BOOTSTRAP"
 expect_pattern TTYYD_POSTBOOT 'POSTBOOT_TTYD=PASS' "$ROOT/scripts/adeptpro-postboot.sh"
 expect_pattern DONT_TOUCH_DHCP "podkop\.settings\.dont_touch_dhcp='1'" "$BOOTSTRAP"
 expect_pattern SHA256_VALIDATION 'actual_sha=.*sha256sum' "$BOOTSTRAP"
-expect_pattern MANUAL_LINK_PRESERVATION_PRESENT 'collect_manual_links' "$UPDATER"
+expect_pattern EXISTING_LINK_READ_PRESENT 'old=.*uget' "$UPDATER"
 expect_pattern SUB_URL_MASKING_PRESENT 'mask_url' "$BOOTSTRAP"
 expect_pattern TAILSCALE_KEY_MASKING_PRESENT 'tskey-\*\*\*MASKED\*\*\*|auth key.*not be printed' "$BOOTSTRAP"
 expect_pattern MIRROR_VERSION_PINNED "PODKOP_APPROVED_VERSION='0\.7\.22'" "$BOOTSTRAP" "$SYNC"
 
-expect_pattern PENDING_MARKER_CREATE 'mv "\$marker_tmp" "\$PENDING_RUNTIME_RELOAD"' "$UPDATER"
+expect_pattern TRANSACTION_JOURNAL_CREATE ': > "\$bt_tmp/pending"' "$FAILOVER_LIB"
+expect_pattern CANDIDATE_HTTP_PREFLIGHT 'shadow_health "\$work"' "$UPDATER"
 expect_pattern PENDING_MARKER_BOOT_CLEAR 'mv -f "\$PENDING_MARKER" "\$LAST_APPLIED_MARKER"' "$RUNTIME_STATE"
 expect_pattern PENDING_MARKER_HASH_CHECK 'CONFIG_HASH_MATCH=' "$RUNTIME_STATE"
 expect_pattern PENDING_MARKER_GLOBAL_CHECK 'podkop global_check' "$RUNTIME_STATE"

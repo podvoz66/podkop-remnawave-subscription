@@ -1,5 +1,9 @@
 # AdeptPro Bootstrap v2
 
+VM202 Fail-Open development: see the [migration, tests and rollback plan](docs/fail-open.ru.md).
+The transactional updater requires the new guard library and an approved migration;
+do not publish this branch to the production bootstrap mirror as a generic update.
+
 Production-oriented OpenWrt bootstrap sources for Podkop, Remnawave subscription
 sync, and direct Tailscale administration. This branch prepares a static mirror;
 it does not deploy or change any production service by itself.
