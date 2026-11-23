@@ -50,16 +50,24 @@ GitHub main на момент сравнения (627cd90, blob updater 08872aa2
   при недоступном WAN recovery не запускается.
 - Три последовательных отказа включают FAIL_OPEN. Ошибки разных компонентов
   считаются подряд, один полностью успешный проход сбрасывает счётчик.
-- FAIL_OPEN: штатный stop Podkop, удаление только PodkopTable и точного правила
+- FAIL_OPEN: FakeIP barrier, удаление только PodkopTable и точного правила
   priority105/mark0x100000/table podkop, удаление local default dev lo из этой таблицы.
+  Затем DIRECT DNS; только после успешного restart dnsmasq и DNS-запроса останавливается sing-box
+  через штатный stop Podkop (при dont_touch_dhcp=1). Иначе используется только stop
+  sing-box, чтобы штатный Podkop не вернул DNS к остановленному upstream.
   В своей таблице podkop_failopen блокируется 198.18.0.0/15, чтобы cached FakeIP не
   утекал в WAN. Новые DNS-ответы реальные. Старым приложениям может потребоваться
   повторное разрешение имени/переподключение до истечения их DNS-кэша.
 - DNS переключает только server/noresolv/resolvfile/cachesize первого dnsmasq,
   сохраняя остальные DHCP-секции. DIRECT DNS: 1.1.1.1, 9.9.9.9 через WAN.
   Исходные четыре поля сохраняются локально и возвращаются после recovery.
-  Отказ самого dnsmasq отмечается в журнале, без бесконечного restart loop.
-- RECOVERY: после cooldown 300 секунд нужны три подряд успешных shadow preflight.
+  Ошибка restart возвращает предыдущий файл и делает одну попытку восстановления
+  dnsmasq. После ошибки повторные restart ограничены cooldown 300s. Persistent dns-pending заставляет повторить применение после прерывания
+  между rename и restart. При неудаче DIRECT DNS sing-box не останавливается.
+  Аппаратный/устойчивый отказ dnsmasq требует Console; доступность не гарантируется.
+- RECOVERY: после отказа cooldown 300 секунд и три подряд успешных shadow preflight.
+  На холодной загрузке cooldown пропускается: три проверки с интервалом 30 секунд
+  позволяют начать восстановление примерно через 60 секунд плюс длительность probes.
   До подтверждения трафик остаётся DIRECT. Затем штатный старт, runtime/DNS checks,
   восстановление DNS и снятие FakeIP blocker. Неудачная активация снова DIRECT и cooldown.
   `status` показывает phase=RECOVERY при накоплении успешных проверок.
@@ -70,7 +78,8 @@ GitHub main на момент сравнения (627cd90, blob updater 08872aa2
   DIRECT, затем подтверждённое recovery. Journal и manual DIRECT сохраняются в /etc.
 - Общий flock сериализует только изменения guard/updater; отдельные locks защищают
   download и shadow process. Скачивание не останавливает 30-секундный мониторинг.
-  Сроки проб ограничены; если проход длится дольше 30 секунд, следующий начнётся
+  Сроки проб ограничены встроенным bounded_run: установленный BusyBox не имеет
+  timeout applet, новые пакеты не требуются; если проход длится дольше 30 секунд, следующий начнётся
   после него, параллельные экземпляры не запускаются. Это не realtime watchdog.
 - Постоянный журнал `/etc/podkop-failover/events.log`: фиксированные сообщения,
   не более примерно 64 KiB + один предыдущий файл. Две последние transaction
@@ -78,7 +87,7 @@ GitHub main на момент сравнения (627cd90, blob updater 08872aa2
 
 ## Обязательные ограничения внедрения
 
-1. Текущий kernel должен поддерживать nft reject/flock/timeout; проверить jq,
+1. Текущий kernel должен поддерживать nft reject/flock; проверить jq,
    curl, uci, sing-box и библиотеки Podkop. Новых пакетов без согласования не ставить.
 2. Порты 17890–17892 должны быть свободны. PodkopTable и таблица podkop/105 должны
    принадлежать только Podkop. Если там сторонние маршруты — STOP: штатный stop
@@ -110,7 +119,7 @@ GitHub main на момент сравнения (627cd90, blob updater 08872aa2
 
 ```sh
 sh tests/prepare-openwrt-runtime.sh /tmp/podkop-test-runtime openwrt-202
-OPENWRT_RUNTIME=/tmp/podkop-test-runtime node --test --test-concurrency=1 tests/test-failover.mjs
+OPENWRT_RUNTIME=/tmp/podkop-test-runtime flock /tmp/podkop-suite.lock node --test --test-concurrency=1 tests/test-failover.mjs
 ```
 
 Тесты запускают реальные ash/libuci, Podkop facade и sing-box 1.13.21 в Codespace.
@@ -125,7 +134,7 @@ Mock boundaries: nft/ip, init services, DNS responses и runtime Clash API. По
 очистка volatile state и recovery journal, не перезагрузка VM. Проверка клиентов,
 LuCI, SSH/ZeroTier и controlled faults остаются этапом после согласования.
 
-Итог локального прогона 23.11.2026: 16/16 integration tests PASS; существующие
+Итог локального прогона 23.11.2026: 29/29 integration tests PASS; существующие
 bootstrap static, IPK validators и runtime-state tests PASS. ShellCheck отсутствует;
 syntax проверен shell-интерпретаторами и Node.js. Новая версия не запускалась на VM202.
 
@@ -208,7 +217,7 @@ flock -u 8
 
 Старый updater не использует новые locks: наличие этих locks НЕ доказывает, что
 старый процесс отсутствует. Время обслуживания должно исключить пересечение.
-Запуск guard входит в DIRECT, затем recovery минимум через пять минут. Проверить
+Запуск guard входит в DIRECT, затем три успешных проверки без boot cooldown. Проверить
 DNS/HTTP/HTTPS с LAN и роутера, SSH, LuCI, ZeroTier и сохранность маршрутов. Только
 после этого согласовывать fault-тесты и последнюю перезагрузку OpenWrt.
 
@@ -238,34 +247,37 @@ test -f "$B/podkop"
 /usr/bin/podkop-failover-guard fail-open
 /etc/init.d/podkop-failover-guard stop
 /etc/init.d/podkop-failover-guard disable
-cp -p "$B/podkop" /etc/config/podkop
-cp -p "$B/config.json" /etc/sing-box/config.json
+. /usr/lib/podkop-failover.sh
+guard_setup
+exec 8>/var/lock/podkop-subscription.lock
+flock -n 8
+lock_control
+# EXIT compensation uses the library directly: no recursive lock acquisition.
+rollback_failed() {
+    trap - EXIT INT TERM
+    fail_open || echo 'STOP: DIRECT incomplete; keep Console, do not stop sing-box manually'
+    echo 'STOP/ROLLBACK: previous services must not be enabled until inspection'
+    exit 1
+}
+trap rollback_failed EXIT INT TERM
+atomic_copy "$B/podkop" /etc/config/podkop
+atomic_copy "$B/config.json" /etc/sing-box/config.json
+atomic_copy "$B/dhcp" "$DATA/normal-dns/dhcp"
+# Previous keys must pass real traffic before normal interception returns.
+for attempt in 1 2 3; do
+    shadow_health "$CFG"
+    [ "$attempt" = 3 ] || sleep 30
+done
+activate_normal
+# Restore old executables only after healthy routing/DNS. Cron must be quiescent.
 cp -p "$B/updater-wrapper" /usr/bin/update-podkop-from-remnawave.sh
 cp -p "$B/updater-real" /usr/bin/update-podkop-from-remnawave.real.sh
-if ! /etc/init.d/podkop start; then
-    /usr/bin/podkop-failover-guard fail-open
-    echo 'Rollback остановлен в DIRECT; требуется Console'
-    exit 1
-fi
-sleep 3
-if ! nslookup example.com 127.0.0.42 >/dev/null 2>&1; then
-    /usr/bin/podkop-failover-guard fail-open
-    exit 1
-fi
-for tag in main-out USA-out; do
-    if ! curl -fsS --max-time 12 "http://192.168.0.1:9090/proxies/$tag/delay?timeout=8000&url=https%3A%2F%2Fwww.gstatic.com%2Fgenerate_204" | jq -e '.delay|type=="number"' >/dev/null; then
-        /usr/bin/podkop-failover-guard fail-open
-        exit 1
-    fi
-done
-cp -p "$B/dhcp" /etc/config/dhcp
-/etc/init.d/dnsmasq restart
-if nft list table inet podkop_failopen >/dev/null 2>&1; then
-    nft delete table inet podkop_failopen
-fi
-cp -p "$B/root-cron" /etc/crontabs/root
 if grep -qx yes "$B/podkop-enabled"; then /etc/init.d/podkop enable; else /etc/init.d/podkop disable; fi
 if grep -qx yes "$B/singbox-enabled"; then /etc/init.d/sing-box enable; else /etc/init.d/sing-box disable; fi
+rm -f "$DATA/manual-direct"
+trap - EXIT INT TERM
+flock -u 9
+flock -u 8
 ```
 
 После rollback проверить реальные main/USA HTTP probes и LAN. Если старые ключи
@@ -274,3 +286,9 @@ if grep -qx yes "$B/singbox-enabled"; then /etc/init.d/sing-box enable; else /et
 не исправление. Никакие SSH-ключи, Tailscale/ZeroTier или firewall fw4 не восстанавливаются
 из этого backup и не изменяются. Согласованное удаление четырёх новых файлов и
 локального состояния — отдельная уборка после успешных проверок.
+
+## Аудит PR #7 и контрольные точки
+
+См. [матрицу аудита и приёмки](audit-pr7.ru.md). Cron не изменяется новым кодом;
+при rollback его backup не перезаписывает параллельные изменения пользователя.
+Откат разрешён только в окне без старого updater: старый код не соблюдает locks.

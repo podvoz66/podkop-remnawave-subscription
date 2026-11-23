@@ -49,7 +49,7 @@ const link=(name,id=uuid)=>`vless://${id}@127.0.0.1:${network.vp}#${name}`;
 function fixture(){
   const root=fs.mkdtempSync(temp+'/root-');
   const cfg=root+'/etc/config';
-  write(cfg+'/podkop',`config section 'main'\n option connection_type 'proxy'\n option proxy_config_type 'urltest'\n list urltest_proxy_links '${link('old-main-rwsub')}'\n list urltest_proxy_links '${link('manual-main')}'\nconfig section 'USA'\n option connection_type 'proxy'\n option proxy_config_type 'urltest'\n list urltest_proxy_links '${link('us-old-rwsub')}'\nconfig section 'unrelated'\n option interface 'zt-safe'\n`);
+  write(cfg+'/podkop',`config settings 'settings'\n option dont_touch_dhcp '1'\nconfig section 'main'\n option connection_type 'proxy'\n option proxy_config_type 'urltest'\n list urltest_proxy_links '${link('old-main-rwsub')}'\n list urltest_proxy_links '${link('manual-main')}'\nconfig section 'USA'\n option connection_type 'proxy'\n option proxy_config_type 'urltest'\n list urltest_proxy_links '${link('us-old-rwsub')}'\nconfig section 'unrelated'\n option interface 'zt-safe'\n`);
   write(cfg+'/dhcp',"config dnsmasq\n list server '127.0.0.42'\n option noresolv '1'\n option cachesize '0'\nconfig dhcp 'lan'\n option interface 'br-lan'\n");
   write(root+'/etc/sing-box/config.json','{"outbounds":[{"type":"direct"}]}');
   write(root+'/etc/podkop-remnawave/subscription.conf',"SUB_URL='https://subscription.invalid/SECRET_SUBSCRIPTION'\n");
@@ -78,11 +78,20 @@ fi
 exec /usr/bin/curl "$@"
 `);
   write(bin+'/pgrep','#!/bin/sh\n[ ! -f "$PODKOP_ROOT/process-fail" ]\n');
-  write(bin+'/nslookup','#!/bin/sh\n[ ! -f "$PODKOP_ROOT/dns-fail" ] || exit 1\necho "Address: 198.18.0.1"\n');
+  write(bin+'/nslookup',`#!/bin/sh
+[ ! -f "$PODKOP_ROOT/direct-dns-fail" ] || exit 1
+if [ -f "$PODKOP_ROOT/dns-fail" ] && grep -q 127.0.0.42 "$PODKOP_ROOT/etc/config/dhcp"; then exit 1; fi
+echo "Address: 198.18.0.1"
+`);
   write(bin+'/logger','#!/bin/sh\nexit 0\n');
   write(bin+'/sync','#!/bin/sh\nexit 0\n');
   write(bin+'/nft',`#!/bin/sh
 echo "nft $*" >> "$PODKOP_ROOT/actions"
+case "$*" in
+ 'delete table inet PodkopTable') [ ! -f "$PODKOP_ROOT/remove-fail" ] || exit 1;;
+ 'delete table inet podkop_failopen') [ ! -f "$PODKOP_ROOT/unblock-fail" ] || exit 1;;
+ '-f -') [ ! -f "$PODKOP_ROOT/block-fail" ] || exit 1;;
+esac
 case "$*" in
  'list table inet podkop_failopen') test -f "$PODKOP_ROOT/fakeip-block";;
  'list table inet PodkopTable') echo tproxy; exit 0;;
@@ -98,8 +107,9 @@ case "$*" in
  '-4 route show table podkop') echo 'local default dev lo scope host';;
 esac
 `);
-  for(const svc of ['podkop','dnsmasq'])write(root+'/etc/init.d/'+svc,`#!/bin/sh
+  for(const svc of ['podkop','dnsmasq','sing-box'])write(root+'/etc/init.d/'+svc,`#!/bin/sh
 echo '${svc}' "$@" >> "$PODKOP_ROOT/actions"
+if [ '${svc}' = dnsmasq ] && [ -f "$PODKOP_ROOT/restart-fail" ]; then exit 1; fi
 if [ '${svc}' = podkop ] && [ "$1" = start ] && [ -f "$PODKOP_ROOT/start-fail" ]; then exit 1; fi
 if [ '${svc}' = podkop ] && [ "$1" = start ]; then rm -f "$PODKOP_ROOT/rules-removed"; fi
 exit 0
@@ -238,6 +248,116 @@ test('DIRECT checks WAN without sing-box and resets recovery after DNS outage',a
   assert.ok(!read(f,'/actions').includes('podkop start'));
   fs.unlinkSync(f.root+'/wan-fail');await shell(f,'guard_tick');
   assert.equal(read(f,'/tmp/podkop-failover/successes').trim(),'1');
-  write(f.root+'/dns-fail','');await shell(f,'guard_tick');
+  write(f.root+'/direct-dns-fail','');await shell(f,'guard_tick');
   assert.equal(read(f,'/tmp/podkop-failover/successes').trim(),'0');
+});
+
+test('DIRECT DNS restart failure restores disk and never stops its sing-box upstream',async()=>{
+  const f=fixture(),before=read(f,'/etc/config/dhcp');write(f.root+'/restart-fail','');
+  await assert.rejects(shell(f,'fail_open'));
+  assert.equal(read(f,'/etc/config/dhcp'),before);
+  assert.ok(!read(f,'/actions').includes('podkop stop'));
+  fs.unlinkSync(f.root+'/restart-fail');await shell(f,'fail_open');
+  assert.ok(read(f,'/etc/config/dhcp').includes('9.9.9.9'));
+  const a=read(f,'/actions');assert.ok(a.lastIndexOf('dnsmasq restart')<a.indexOf('podkop stop'));
+});
+test('failure at FakeIP barrier or interception removal aborts before stopping DNS upstream',async()=>{
+  for(const fault of ['block-fail','remove-fail']){
+    const f=fixture();write(f.root+'/'+fault,'');await assert.rejects(shell(f,'fail_open'));
+    assert.ok(!read(f,'/actions').includes('podkop stop'));
+    fs.unlinkSync(f.root+'/'+fault);await shell(f,'fail_open');
+    assert.equal(read(f,'/tmp/podkop-failover/mode').trim(),'FAIL_OPEN');
+  }
+});
+test('recovery failures after start, health, DNS restore or FakeIP unblock return to DIRECT',async()=>{
+  for(const fault of ['start-fail','api-USA-fail','restart-fail','unblock-fail']){
+    const f=fixture();await shell(f,'fail_open');write(f.root+'/'+fault,'');
+    await shell(f,'if activate_normal; then exit 99; else fail_open || true; fi');
+    assert.equal(read(f,'/tmp/podkop-failover/mode').trim(),'FAIL_OPEN');
+    assert.ok(read(f,'/etc/config/dhcp').includes('9.9.9.9'),fault);
+    assert.ok(!read(f,'/etc/config/dhcp').includes('127.0.0.42'),fault);
+  }
+});
+test('cold boot skips cooldown but still requires three real successful probes',async()=>{
+  const f=fixture();f.env.COOLDOWN='300';
+  await exec(ash,[repo+'/scripts/podkop-failover-guard.sh','boot'],{env:f.env});
+  assert.ok(!fs.existsSync(f.root+'/tmp/podkop-failover/last-transition'));
+  for(let i=0;i<2;i++)await shell(f,'guard_tick');
+  assert.equal(read(f,'/tmp/podkop-failover/mode').trim(),'FAIL_OPEN');
+  await shell(f,'guard_tick');assert.equal(read(f,'/tmp/podkop-failover/mode').trim(),'NORMAL');
+});
+
+test('interrupted DNS disk/runtime transaction forces restart even when files match',async()=>{
+  const f=fixture();await shell(f,'fail_open');
+  write(f.root+'/etc/podkop-failover/dns-pending','');
+  const before=read(f,'/actions');await shell(f,'dns_mode direct');
+  assert.ok(read(f,'/actions').slice(before.length).includes('dnsmasq restart'));
+  assert.ok(!fs.existsSync(f.root+'/etc/podkop-failover/dns-pending'));
+});
+test('partial rollback retains pending journal and retry completes restoration',async()=>{
+  const f=fixture(),before=read(f,'/etc/config/podkop');await shell(f,'backup_transaction');
+  write(f.cfg+'/podkop','corrupted');
+  await assert.rejects(shell(f,'atomic_copy() { return 1; }; recover_transaction'));
+  assert.ok(fs.existsSync(f.root+'/etc/podkop-failover/transaction/pending'));
+  await shell(f,'recover_transaction');assert.equal(read(f,'/etc/config/podkop'),before);
+  assert.ok(!fs.existsSync(f.root+'/etc/podkop-failover/transaction/pending'));
+});
+test('changed native DNS ownership prevents recovery and bypasses native stop',async()=>{
+  const f=fixture();await exec(runtime+'/bin/uci',['-c',f.cfg,'set','podkop.settings.dont_touch_dhcp=0'],{env:f.env});
+  await exec(runtime+'/bin/uci',['-c',f.cfg,'commit','podkop'],{env:f.env});
+  await shell(f,'fail_open');await assert.rejects(shell(f,'activate_normal'));
+  assert.ok(!read(f,'/actions').includes('podkop stop'));
+  assert.ok(read(f,'/actions').includes('sing-box stop'));
+  assert.ok(read(f,'/etc/config/dhcp').includes('9.9.9.9'));
+});
+
+test('persistent dnsmasq restart errors are rate limited after one compensation',async()=>{
+  const f=fixture();f.env.COOLDOWN='300';write(f.root+'/restart-fail','');
+  await assert.rejects(shell(f,'fail_open'));const actions=read(f,'/actions');
+  await assert.rejects(shell(f,'fail_open'));
+  assert.equal((read(f,'/actions').match(/dnsmasq restart/g)||[]).length,2);
+  assert.equal((actions.match(/dnsmasq restart/g)||[]).length,2);
+  assert.ok(!read(f,'/actions').includes('podkop stop'));
+});
+test('procd still registers watchdog after a failed boot transition',async()=>{
+  const f=fixture();write(f.root+'/boot-failure','#!/bin/sh\nexit 1\n');
+  const init=fs.readFileSync(repo+'/scripts/podkop-failover-guard.init','utf8').replace('/usr/bin/podkop-failover-guard boot',f.root+'/boot-failure');
+  write(f.root+'/guard.init',init);
+  const result=await exec(ash,['-c',`procd_open_instance() { :; }; procd_close_instance() { :; }; procd_set_param() { echo "$*"; }; . '${f.root}/guard.init'; start_service`],{env:f.env});
+  assert.match(result.stdout,/command \/usr\/bin\/podkop-failover-guard daemon/);
+});
+test('DNS health failure after normal DNS restore compensates back to DIRECT',async()=>{
+  const f=fixture();await shell(f,'fail_open');
+  await shell(f,'n=0; dns_health() { n=$((n+1)); [ "$n" -lt 2 ]; }; if activate_normal; then exit 99; else fail_open; fi');
+  assert.equal(read(f,'/tmp/podkop-failover/mode').trim(),'FAIL_OPEN');
+  assert.ok(read(f,'/etc/config/dhcp').includes('9.9.9.9'));
+  assert.ok(!read(f,'/etc/config/dhcp').includes('127.0.0.42'));
+});
+
+test('concurrent edit between candidate copy and hash capture cannot be overwritten',async()=>{
+  const f=fixture();write(f.root+'/bin/sha256sum',`#!/bin/sh
+case "$1" in
+ */.subscription.*/podkop) /usr/bin/sha256sum "$@"; echo '# concurrent manual edit' >> "$PODKOP_ROOT/etc/config/podkop";;
+ *) exec /usr/bin/sha256sum "$@";;
+esac
+`);
+  const r=await update(f);assert.equal(r.ok,false);assert.match(r.stderr,/changed concurrently/);
+  assert.ok(read(f,'/etc/config/podkop').includes('# concurrent manual edit'));
+  assert.ok(!fs.existsSync(f.root+'/actions'));
+});
+
+test('bounded runner works without timeout and terminates a stalled direct child',async()=>{
+  const f=fixture();write(f.root+'/bin/timeout','#!/bin/sh\nexit 127\n');
+  await shell(f,'bounded_run 1 true');
+  const start=Date.now();await assert.rejects(shell(f,'bounded_run 1 sleep 20'));
+  assert.ok(Date.now()-start<4000);
+  await shell(f,'shadow_health "$CFG"');
+});
+
+test('DIRECT DNS traffic must succeed before its previous sing-box upstream can stop',async()=>{
+  const f=fixture();write(f.root+'/direct-dns-fail','');
+  await assert.rejects(shell(f,'fail_open'));
+  assert.ok(!read(f,'/actions').includes('podkop stop'));
+  fs.unlinkSync(f.root+'/direct-dns-fail');await shell(f,'fail_open');
+  assert.equal(read(f,'/tmp/podkop-failover/mode').trim(),'FAIL_OPEN');
 });

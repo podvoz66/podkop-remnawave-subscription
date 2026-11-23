@@ -91,6 +91,30 @@ make_probe_config() (
     printf '%s\n' "$config" > "$mp_out"
     sing-box check -c "$mp_out" >/dev/null 2>&1
 )
+# OpenWrt's installed BusyBox has no timeout applet. Bound a direct child
+# without packages; reap it and its watchdog, including interruption of probes.
+bounded_run() (
+    br_seconds=$1; shift
+    "$@" &
+    br_pid=$!
+    (
+        br_sleep=''
+        trap '[ -z "$br_sleep" ] || kill "$br_sleep" 2>/dev/null; exit 0' TERM INT
+        sleep "$br_seconds" & br_sleep=$!
+        wait "$br_sleep" || exit 0
+        kill -TERM "$br_pid" 2>/dev/null || exit 0
+        sleep 1 & br_sleep=$!
+        wait "$br_sleep" || exit 0
+        kill -KILL "$br_pid" 2>/dev/null || true
+    ) </dev/null >/dev/null 2>&1 9>&- 8>&- 7>&- 6>&- &
+    br_timer=$! br_done=0
+    trap '[ "$br_done" = 1 ] || kill -KILL "$br_pid" 2>/dev/null || :; kill "$br_timer" 2>/dev/null || :; wait "$br_pid" 2>/dev/null || :; wait "$br_timer" 2>/dev/null || :' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    wait "$br_pid"
+    br_result=$? br_done=1
+    exit "$br_result"
+)
 http_via() {
     hv_port=$1
     for hv_url in $PROBE_URLS; do
@@ -106,12 +130,12 @@ shadow_health() (
     validate_sections "$sh_dir" || exit 1
     sh_work=$(mktemp -d "$RUN/probe.XXXXXX") || exit 1
     sh_pid=''
-    trap '[ -z "$sh_pid" ] || { kill "$sh_pid" 2>/dev/null || :; wait "$sh_pid" 2>/dev/null || :; }; rm -rf "$sh_work"' EXIT
+    trap '[ -z "$sh_pid" ] || { kill "$sh_pid" 2>/dev/null || :; kill -KILL "$sh_pid" 2>/dev/null || :; wait "$sh_pid" 2>/dev/null || :; }; rm -rf "$sh_work"' EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
     make_probe_config "$sh_dir" "$sh_work/config.json" >/dev/null 2>&1 || exit 1
-    sh_count=$(printf '%s\n' "$REQUIRED_SECTIONS" | wc -w)
-    timeout "$((2*PROBE_SECONDS*(sh_count+1)+5))" sing-box run -c "$sh_work/config.json" -D "$sh_work" >/dev/null 2>&1 9>&- &
+    # HTTP probes have curl deadlines; own the real sing-box PID for cleanup.
+    sing-box run -c "$sh_work/config.json" -D "$sh_work" >/dev/null 2>&1 9>&- &
     sh_pid=$!
     sleep 1
     kill -0 "$sh_pid" 2>/dev/null || exit 1
@@ -129,14 +153,14 @@ api_health() {
         ah_response=$(curl -s --get --connect-timeout 2 --max-time "$PROBE_SECONDS" \
           --data-urlencode "timeout=$((PROBE_SECONDS*1000-500))" --data-urlencode "url=$ah_url" \
           "$API/proxies/$ah_tag/delay" 2>/dev/null) || continue
-        printf '%s' "$ah_response" | jq -e '.delay|type=="number"' >/dev/null 2>&1 && return 0
+        printf '%s' "$ah_response" | jq -e '.delay | type == "number" and . >= 0' >/dev/null 2>&1 && return 0
     done
     return 1
 }
 dns_health() {
     # Independent DNS and FakeIP path; no unbounded nslookup.
-    timeout "$PROBE_SECONDS" nslookup example.com 127.0.0.1 >/dev/null 2>&1 || return 1
-    timeout "$PROBE_SECONDS" nslookup youtube.com 127.0.0.42 2>/dev/null |
+    bounded_run "$PROBE_SECONDS" nslookup example.com 127.0.0.1 >/dev/null 2>&1 || return 1
+    bounded_run "$PROBE_SECONDS" nslookup youtube.com 127.0.0.42 2>/dev/null |
       grep -Eq '198\.(18|19)\.'
 }
 normal_health() {
@@ -195,9 +219,21 @@ dns_mode() (
         done
     fi
     uci -c "$dm_work" -t "$dm_work/.uci" commit dhcp || exit 1
-    if ! cmp -s "$dm_work/dhcp" "$CFG/dhcp"; then
+    cp -p "$CFG/dhcp" "$dm_work/previous" || exit 1
+    if ! cmp -s "$dm_work/dhcp" "$CFG/dhcp" || [ -f "$DATA/dns-pending" ]; then
+        dm_retry=$(cat "$RUN/dns-retry-at" 2>/dev/null || echo 0)
+        [ "$(cut -d . -f 1 /proc/uptime)" -ge "$dm_retry" ] || exit 1
+        # Journal the disk/runtime boundary so SIGKILL cannot suppress a retry.
+        : > "$DATA/dns-pending" || exit 1
         atomic_copy "$dm_work/dhcp" "$CFG/dhcp" || exit 1
-        "$R/etc/init.d/dnsmasq" restart >/dev/null 2>&1 || exit 1
+        if ! "$R/etc/init.d/dnsmasq" restart >/dev/null 2>&1; then
+            # A failed reload must not make the next tick mistake disk for runtime.
+            atomic_copy "$dm_work/previous" "$CFG/dhcp" || exit 1
+            "$R/etc/init.d/dnsmasq" restart >/dev/null 2>&1 || true
+            printf '%s\n' "$(($(cut -d . -f 1 /proc/uptime)+COOLDOWN))" > "$RUN/dns-retry-at"
+            exit 1
+        fi
+        rm -f "$DATA/dns-pending" "$RUN/dns-retry-at"
     fi
 )
 block_fakeip() {
@@ -223,16 +259,26 @@ remove_podkop_routes() {
 }
 fail_open() {
     block_fakeip || return 1
-    "$R/etc/init.d/podkop" stop >/dev/null 2>&1 || true
+    # Remove interception first, but retain sing-box until DIRECT DNS is installed.
+    # Never stop the only DNS upstream after a failed dnsmasq transaction.
     remove_podkop_routes || return 1
     dns_mode direct || return 1
-    printf 'FAIL_OPEN\n' > "$RUN/mode.new" && mv "$RUN/mode.new" "$RUN/mode"
+    bounded_run "$PROBE_SECONDS" nslookup example.com 127.0.0.1 >/dev/null 2>&1 || return 1
+    if [ "$(uget "$CFG" podkop.settings.dont_touch_dhcp 2>/dev/null)" = 1 ]; then
+        "$R/etc/init.d/podkop" stop >/dev/null 2>&1 || true
+    else
+        "$R/etc/init.d/sing-box" stop >/dev/null 2>&1 || true
+    fi
+    remove_podkop_routes || return 1
+    printf 'FAIL_OPEN\n' > "$RUN/mode.new" && mv "$RUN/mode.new" "$RUN/mode" || return 1
     printf '0\n' > "$RUN/failures"
     printf '0\n' > "$RUN/successes"
     printf '%s\n' "$(cut -d . -f 1 /proc/uptime)" > "$RUN/last-transition"
     event 'FAIL_OPEN: traffic uses ISP address; cached FakeIP rejected'
 }
 activate_normal() {
+    # Native start/stop must leave the guard in charge of DNS.
+    [ "$(uget "$CFG" podkop.settings.dont_touch_dhcp 2>/dev/null)" = 1 ] || return 1
     # Called only after shadow_health; no blind attempts with broken keys.
     "$R/etc/init.d/podkop" start >/dev/null 2>&1 || return 1
     sleep 2
@@ -240,7 +286,7 @@ activate_normal() {
     dns_mode normal || return 1
     dns_health || return 1
     if nft list table inet podkop_failopen >/dev/null 2>&1; then nft delete table inet podkop_failopen || return 1; fi
-    printf 'NORMAL\n' > "$RUN/mode.new" && mv "$RUN/mode.new" "$RUN/mode"
+    printf 'NORMAL\n' > "$RUN/mode.new" && mv "$RUN/mode.new" "$RUN/mode" || return 1
     printf '0\n' > "$RUN/failures"
     printf '0\n' > "$RUN/successes"
     printf '%s\n' "$(cut -d . -f 1 /proc/uptime)" > "$RUN/last-transition"
@@ -255,13 +301,13 @@ guard_tick() {
         if normal_health; then printf '0\n' > "$RUN/failures"; return 0; fi
         gt_n=$(cat "$RUN/failures" 2>/dev/null || echo 0); gt_n=$((gt_n+1))
         printf '%s\n' "$gt_n" > "$RUN/failures"
-        [ "$gt_n" -lt 3 ] || fail_open
+        if [ "$gt_n" -ge 3 ]; then fail_open || return 1; fi
         return 0
     fi
     # Reassert bypass in case an unrelated cron/start recreated interception.
     remove_podkop_routes || return 1
     dns_mode direct || return 1
-    if ! timeout "$PROBE_SECONDS" nslookup example.com 127.0.0.1 >/dev/null 2>&1; then
+    if ! bounded_run "$PROBE_SECONDS" nslookup example.com 127.0.0.1 >/dev/null 2>&1; then
         printf '0\n' > "$RUN/successes"
         if [ ! -f "$RUN/direct-dns-failed" ]; then event 'DIRECT DNS unavailable: inspect dnsmasq/WAN; no restart loop'; : > "$RUN/direct-dns-failed"; fi
         return 0
@@ -274,7 +320,9 @@ guard_tick() {
     fi
     [ ! -f "$DATA/manual-direct" ] || return 0
     gt_last=$(cat "$RUN/last-transition" 2>/dev/null || echo 0)
-    [ "$(($(cut -d . -f 1 /proc/uptime)-gt_last))" -ge "$COOLDOWN" ] || return 0
+    if [ -f "$RUN/last-transition" ]; then
+        [ "$(($(cut -d . -f 1 /proc/uptime)-gt_last))" -ge "$COOLDOWN" ] || return 0
+    fi
     if shadow_health "$CFG"; then
         gt_n=$(cat "$RUN/successes" 2>/dev/null || echo 0); gt_n=$((gt_n+1))
         printf '%s\n' "$gt_n" > "$RUN/successes"

@@ -54,7 +54,7 @@ if [ -n "$(uci -c "$CFG" -q changes podkop 2>/dev/null)" ] ||
     die 'Update rejected: pending UCI changes'
 fi
 cp -p "$CFG/podkop" "$work/podkop" || die 'Update rejected: cannot stage config'
-original_hash=$(sha256sum "$CFG/podkop" | awk '{print $1}')
+original_hash=$(sha256sum "$work/podkop" | awk '{print $1}')
 for section in $REQUIRED_SECTIONS; do
     case "$section" in main|USA) ;; *) die 'Update rejected: unsupported section mapping';; esac
     : > "$work/$section.new"
@@ -101,6 +101,8 @@ fi
 [ -f "$DATA/normal-dns/dhcp" ] || die 'Update rejected: run approved guard prepare first'
 lock_control || exit 75
 [ "$original_hash" = "$(sha256sum "$CFG/podkop" | awk '{print $1}')" ] || die 'Update rejected: configuration changed concurrently'
+[ -z "$(uci -c "$CFG" -q changes podkop 2>/dev/null)" ] &&
+[ -z "$(uci -c "$CFG" -q changes dhcp 2>/dev/null)" ] || die 'Update rejected: pending UCI changes after preflight'
 backup_transaction || die 'Update rejected: backup failed'
 if ! fail_open; then
     recover_transaction || true

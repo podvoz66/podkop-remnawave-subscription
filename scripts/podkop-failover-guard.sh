@@ -6,7 +6,12 @@ case "${1:-status}" in
     daemon)
         while :; do
             started=$(cut -d . -f 1 /proc/uptime)
-            (lock_control && guard_tick) >/dev/null 2>&1
+            if (lock_control && guard_tick) >/dev/null 2>&1; then
+                rm -f "$RUN/control-error"
+            elif [ ! -f "$RUN/control-error" ]; then
+                event 'Guard transition incomplete or lock busy: retry pending; inspect Console if persistent'
+                : > "$RUN/control-error"
+            fi
             elapsed=$(($(cut -d . -f 1 /proc/uptime)-started))
             delay=$((INTERVAL-elapsed)); [ "$delay" -gt 0 ] || delay=1
             sleep "$delay"
@@ -18,7 +23,9 @@ case "${1:-status}" in
         lock_control || exit 75
         [ -f "$DATA/normal-dns/dhcp" ] || exit 1
         recover_transaction || exit 1
-        fail_open ;;
+        fail_open || exit 1
+        # Cold boot has no flapping history: keep three probes, skip outage cooldown.
+        rm -f "$RUN/last-transition" ;;
     fail-open)
         lock_control || exit 75
         : > "$DATA/manual-direct"
