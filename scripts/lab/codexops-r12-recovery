@@ -1,0 +1,115 @@
+#!/bin/bash
+# Proposed root-only cold image recovery. VM203 ONLY. No qm set/clone/global LVM.
+set -Eeuo pipefail
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C
+bad(){ echo "STOP: $*" >&2; exit 1; }
+[[ $# == 2 && $2 == 203 ]] || bad 'only VM203 recovery is allowed'
+action=$1
+case "$action" in status|capture|accept|restore|arm|confirm|expire) :;; *) bad 'action denied';; esac
+[[ $EUID == 0 && $(hostname -s) == podvoz-beelink ]] || bad 'PVE root required'
+S=/var/lib/r12-lab203-recovery
+W=/usr/local/sbin/codexops-r12-lab
+SELF=/usr/local/sbin/codexops-r12-recovery
+[[ -d $S && ! -L $S && $(stat -c '%u:%a' "$S") == 0:700 ]] || bad 'trusted state missing'
+exec 9>"$S/operation.lock"
+flock -n 9 || bad 'another recovery operation active'
+# Reuse the reviewed isolation guard. Never bypass it with a different config.
+"$W" inspect 203 >/dev/null
+cfg=$(qm config 203)
+grep -Eq '^scsi0: extra-storage:vm-203-disk-0(,|$)' <<< "$cfg" || bad 'unexpected203 volume'
+DEV=/dev/extra-storage/vm-203-disk-0
+[[ -b $DEV && $(pvesm path extra-storage:vm-203-disk-0) == "$DEV" ]] || bad 'device mapping mismatch'
+size=$(blockdev --getsize64 "$DEV")
+[[ $size =~ ^[0-9]+$ && $size -gt 0 && $size -le 536870912 ]] || bad 'disk outside approved512MiB bound'
+case "$action" in capture|restore|expire)
+ free_kib=$(df -Pk "$S" | awk 'NR==2 {print $4}')
+ [[ $free_kib =~ ^[0-9]+$ && $free_kib -gt $((3*size/1024+65536)) ]] || bad 'host free space insufficient'
+ ;; esac
+checked(){
+ [[ -f $S/baseline.qcow2 && ! -L $S/baseline.qcow2 ]] || bad 'no baseline'
+ (cd "$S"; sha256sum -c baseline.sha256 >/dev/null)
+ [[ $(cat "$S/size") == "$size" ]] || bad 'disk size changed'
+ [[ $(printf '%s\n' "$cfg" | sha256sum | awk '{print $1}') == "$(cat "$S/config.sha256")" ]] || bad 'VM config changed'
+ timeout 30 qemu-img check -f qcow2 "$S/baseline.qcow2" >/dev/null
+}
+fence(){
+ local pid=
+ [[ ! -s /run/qemu-server/203.pid ]] || pid=$(cat /run/qemu-server/203.pid)
+ if [[ $(qm status 203) == 'status: running' ]]; then "$W" stop 203 >/dev/null; fi
+ [[ $(qm status 203) == 'status: stopped' ]] || bad 'fencing not confirmed'
+ if [[ -n $pid ]]; then [[ $pid =~ ^[0-9]+$ && ! -d /proc/$pid ]] || bad 'old QEMU PID still exists'; fi
+ [[ -z $(findmnt -rn -S "$(readlink -f "$DEV")") ]] || bad 'disk mounted'
+ if fuser -s "$DEV"; then bad 'device still opened'; fi
+}
+restore(){
+ checked
+ # Prepare and verify rescue BEFORE interrupting the guest; preserve failed LV contents
+ # as a separate forensic image after fencing, never use a live-mounted guest disk.
+ [[ ! -e $S/rescue.raw ]] || bad 'stale rescue file; manual review required'
+ timeout 60 qemu-img convert -f qcow2 -O raw "$S/baseline.qcow2" "$S/rescue.raw"
+ [[ $(stat -c %s "$S/rescue.raw") == "$size" ]] || bad 'rescue size mismatch'
+ fence
+ stamp=$(date -u +%Y%m%dT%H%M%SZ)
+ [[ ! -e $S/failed-$stamp.qcow2 ]] || bad 'forensic filename conflict'
+ timeout 60 qemu-img convert -f raw -O qcow2 "$DEV" "$S/failed-$stamp.qcow2"
+ timeout 60 dd if="$S/rescue.raw" of="$DEV" bs=4M conv=fsync,notrunc status=none
+ timeout 60 qemu-img compare -f raw -F raw "$S/rescue.raw" "$DEV" >/dev/null
+ rm -f "$S/rescue.raw" "$S/armed"
+ systemctl stop r12-lab203-deadline.timer >/dev/null 2>&1 || true
+ "$W" start 203 >/dev/null
+ echo 'RESTORED_UNVERIFIED: verify serial and LAN HTTP/TLS/DNS; no automatic success claim'
+}
+case "$action" in
+status)
+ qm status 203
+ [[ ! -e $S/baseline.qcow2 ]] || { checked; echo BASELINE_HASH_PASS; }
+ [[ ! -e $S/armed ]] || echo DEADLINE_ARMED
+ ;;
+capture)
+ [[ ! -e $S/baseline.qcow2 && ! -e $S/armed ]] || bad 'baseline/pending deployment exists'
+ [[ ! -e $S/baseline.tmp ]] || bad 'partial capture exists'
+ # Caller must sync the healthy guest first, then verify this cold capture by boot/probes.
+ fence
+ timeout 60 qemu-img convert -f raw -O qcow2 "$DEV" "$S/baseline.tmp"
+ timeout 30 qemu-img check -f qcow2 "$S/baseline.tmp" >/dev/null
+ printf '%s\n' "$size" > "$S/size"
+ printf '%s\n' "$cfg" | sha256sum | awk '{print $1}' > "$S/config.sha256"
+ mv "$S/baseline.tmp" "$S/baseline.qcow2"
+ (cd "$S"; sha256sum baseline.qcow2 size config.sha256 > baseline.sha256)
+ "$W" start 203 >/dev/null
+ echo BASELINE_CAPTURED_UNVERIFIED
+ ;;
+accept)
+ checked
+ [[ $(qm status 203) == 'status: running' ]] || bad 'guest not running'
+ [[ ! -e $S/armed ]] || bad 'deployment pending'
+ # Explicit operator attestation, only after real transit probes (never PID-only automatic accept).
+ cp "$S/baseline.sha256" "$S/accepted.sha256"
+ echo BASELINE_ACCEPTED_BY_OPERATOR
+ ;;
+restore) restore;;
+arm)
+ checked
+ cmp -s "$S/baseline.sha256" "$S/accepted.sha256" || bad 'baseline not accepted'
+ [[ ! -e $S/armed ]] || bad 'already armed'
+ [[ $(systemctl show r12-lab203-deadline.timer -p LoadState --value) == not-found ]] || bad 'deadline unit already exists'
+ now=$(awk '{print int($1)}' /proc/uptime)
+ printf '%s %s\n' "$(cat /proc/sys/kernel/random/boot_id)" "$((now+900))" > "$S/armed"
+ if ! systemd-run --collect --unit=r12-lab203-deadline --on-active=900s --timer-property=AccuracySec=1s "$SELF" expire 203; then rm -f "$S/armed"; bad 'deadline creation failed'; fi
+ echo DEADLINE_ARMED_900_SECONDS
+ ;;
+confirm)
+ [[ -f $S/armed ]] || bad 'not armed'
+ read -r boot deadline < "$S/armed"
+ [[ $boot == "$(cat /proc/sys/kernel/random/boot_id)" && $(awk '{print int($1)}' /proc/uptime) -lt $deadline ]] || bad 'deadline expired or host rebooted'
+ systemctl stop r12-lab203-deadline.timer
+ rm "$S/armed"
+ echo DEADLINE_CONFIRMED_BY_OPERATOR
+ ;;
+expire)
+ [[ -e $S/armed ]] || exit 0
+ read -r boot deadline < "$S/armed"
+ [[ $boot != "$(cat /proc/sys/kernel/random/boot_id)" || $(awk '{print int($1)}' /proc/uptime) -ge $deadline ]] || bad 'deadline not reached'
+ restore
+ ;;
+esac

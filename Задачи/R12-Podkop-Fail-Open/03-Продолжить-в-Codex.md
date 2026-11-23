@@ -34,3 +34,10 @@ LAB203/204 running, restricted wrapper установлен. В203 Stage5 адр
 не менялись; в204 работают fixture и узкий host-route. Stage6 rollback в204 автономен.
 Нет установленных Podkop/sing-box/curl203; требуется офлайн подготовка. Full guest
 host disk recovery ещё BLOCKER. Production NO-GO, wrapper202 запрещён sudo.
+
+## Stage7: точка остановки на дополнительном root capability
+[Офлайн-readiness и recovery bootstrap](../../docs/lab-stage7-recovery.ru.md).
+Root bootstrap нового203 recovery staged, но НЕ установлен и ещё НЕ разрешён.
+Установка Podkop/sing-box не выполнялась; APK signatures/transitive closure и bulk
+transport ещё gate. Stage6 состояние не откатывалось. Не повторять инвентаризацию:
+сначала owner approval нового root capability, затем live capture/restore acceptance.
