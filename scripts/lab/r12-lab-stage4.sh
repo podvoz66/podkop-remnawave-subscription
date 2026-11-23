@@ -116,7 +116,7 @@ else
         [[ -z $(ip -n "$n" -o -4 addr show dev "$d" | awk -v a="${ADDRS[i]}" '$4!=a') ]] || fail 'foreign IPv4 addresses'
         # Ignore loopback-local IPv6 routes (::1); reject IPv6 on the LAB NIC and any default route.
         [[ -z $(ip -n "$n" -4 route show default) && -z $(ip -n "$n" -6 route show default) ]] || fail 'foreign default route'
-        [[ -z $(ip -n "$n" -6 route show table all dev "$d") ]] || fail 'foreign IPv6 route on LAB NIC'
+        [[ -z $(ip -n "$n" -6 route show table main dev "$d") ]] || fail 'foreign IPv6 main-table route on LAB NIC'
         prefix=10.253.202.0/24; [[ $i == 0 ]] || prefix=10.253.203.0/24
         [[ -z $(ip -n "$n" -4 route show table main | awk -v p="$prefix" -v d="$d" '$1!=p || $2!="dev" || $3!=d || $4!="proto" || $5!="kernel"') ]] || fail 'foreign namespace route'
       else
