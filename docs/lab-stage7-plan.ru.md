@@ -28,3 +28,12 @@ Stage6 rollback доступен автономно в204, Stage5 rollback203 о
 согласовать их композицию с новыми VPN routes/nft rules, не удалять чужие состояния.
 Следующий безопасный шаг: офлайн package/readiness inventory и проект snapshot/rescue
 в пределах LAB; никаких production deploy/merge.
+
+## Изменение приоритета после исследования готовых fail-open решений (2026-11-23)
+
+До разработки самописного crash-watchdog сравнить штатный `podkop stop`,
+OpenWrt `procd`, `podkop-engine` с готовым `failsafe` и `urltest.fallbacks`.
+[Основания, источники, границы и LAB-критерии](r12-native-fail-open-options.ru.md).
+Это изменение плана, не установка и не доказательство, что полное переключение
+VPN→DIRECT→VPN существует в обычном Podkop. Пункты snapshot/host rollback,
+transaction-safe updater и полный guest recovery остаются обязательными.
