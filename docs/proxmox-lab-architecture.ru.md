@@ -25,30 +25,46 @@ firewall, routing, SSH, ключей или systemd. Тесты повторно
 - pve-cluster active, одиночный Proxmox: кластерный quorum не является отдельным
   препятствием стенду. Это не испытание потери WAN или отказа host storage.
 
-**До разрешения на создание LAB — STOP:** осталось установить физическое backing
-extra-storage и проверить установленный QEMU/PVE Unix-socket backend. Ресурсы:
-203=OpenWrt1vCPU/1GiB/4GiB,204=fixture1vCPU/1GiB/4GiB, резерв32GiB extra-storage.
-Снятие LVM gate не разрешает создание VM и не подтверждает автономный recovery.
+### Обновление владельца: NVMe и QEMU
 
-### Минимальная оставшаяся read-only проверка (root Shell владельца)
+Root-диагностика подтвердила extra-storage на отдельном NVMe /dev/nvme0n1, 1ТБ,
+исправный по текущим показателям thin-pool, около862GiB свободно. QEMU11.1.3
+поддерживает socket и stream. BLOCKER по физическому backing extra-storage снят;
+независимость backup-носителя и отказоустойчивость host этим не доказаны.
+Повторные pvs/lsblk/backend-help не требуются без изменения состояния.
 
-```sh
-pvs --readonly -o pv_name,vg_name,pv_size,pv_free --select 'vg_name=extra-storage'
-lsblk -e 7 -o NAME,TYPE,SIZE,MODEL,TRAN,PKNAME,MOUNTPOINTS
-qemu-system-x86_64 --version
-qemu-system-x86_64 -netdev help
-```
+### Минимальный план LAB203/204 — только после отдельного разрешения
 
-PV→lsblk→parent disk позволяет установить физическое backing без чтения данных,
-серийных номеров и UUID. Если PV находится на dm/md, проследить всю цепочку parents;
-название VG не доказывает отдельный физический диск или failure domain.
-QEMU help подтверждает только наличие stream/socket backend, не Unix-синтаксис и
-не корректность PVE args. Следующий безопасный шаг — сверить установленную локальную
-man qemu-system-x86_64 (разделы netdev stream/socket, addr.type=unix) с этой версией.
-Не запускать QEMU с socket/listener, не создавать dummy VM для проверки. До разрешённого
-LAB фактическая интеграция остаётся UNVERIFIED; qm showcmd возможен лишь после отдельного
-разрешения создать изолированную конфигурацию LAB. Отсутствие stream или Unix support
-означает STOP, без подмены на production bridge.
+1. Перед allocation повторно проверить свободные203/204 и текущий запас ресурсов.
+   Использовать чистые проверенные образы, без production секретов/клонирования202.
+2. До создания конфигураций изучить локальную man установленной QEMU11.1.3:
+   stream, server, addr.type=unix, addr.path; проверить поддержку custom args
+   установленной PVE. Подготовить два отдельных endpoint пути под root0700 /run.
+   Оба LAB соединяются только друг с другом, никакого host TCP listener/bridge/NAT.
+3. Создать выключенные LAB203 OpenWrt и LAB204 Linux: каждому1vCPU/1GiB/новый4GiB
+   диск extra-storage, onboot=0, serial console; первоначально без NIC и custom args.
+   Резерв32GiB. Это будущие изменения, сейчас НЕ разрешены и НЕ выполнялись.
+4. Добавить только LAB custom QEMU args: две пары virtio NIC + stream Unix endpoints
+   lab-lan/lab-wan, VM204 server, VM203 client. ID netdev/device уникальны внутри VM;
+   MAC новые, не production. Точный синтаксис утвердить по установленной документации,
+   не считать один backend help достаточной проверкой. Проверить root доступ QEMU
+   к socket каталогу. Для повторного запуска порядок server/client и reconnect
+   исследовать отдельно: отсутствие reconnect нельзя выдавать за отказ OpenWrt.
+5. До любого запуска проверить qm showcmd 203 --pretty и qm showcmd 204 --pretty:
+   ожидаются только два Unix endpoint, нет production netN, tap/bridge/user/passt,
+   TCP/hostfwd, passthrough и автоподключений. Ошибка parser/args → STOP;
+   не использовать vmbr0/vmbr1 как обход. showcmd не доказывает runtime handshake.
+6. После разрешённого первого запуска без NIC проверить serial/getty тестовых ОС;
+   затем отдельным шагом подключить проверенные Unix NIC. VM204 запускает endpoints
+   первой. Внутри VM204 разделить LAN client10.253.202.2 и WAN fixture10.253.203.1
+   по namespaces; LAB203 LAN10.253.202.1/WAN10.253.203.2. DHCP только внутри LAB.
+7. GO на recovery-тесты лишь после реального LAN→router→WAN HTTP/HTTPS/DNS транзита,
+   подтверждения отсутствия production uplink и проверки restart-order/reconnect.
+   Проверять новые host netdev/routes/listeners до/после; production не менять.
+
+**Сейчас STOP на создание:** требуется отдельное разрешение LAB; PVE Unix-socket
+синтаксис/handshake ещё UNVERIFIED. QGA202 отсутствует, serial202 recovery не испытан.
+PR7 остаётся Draft / PRODUCTION NO-GO, никаких VM/host изменений на этом этапе.
 
 ## Подтверждено предыдущим SSH
 
@@ -213,7 +229,7 @@ switch + boot + LAN приёмка. Сейчас нет оснований об�
 ## Испытания и этапы: STOP/GO
 
 1. **RO gate (сейчас STOP):** LVM и singleton PVE подтверждены; осталось проверить
-   физическое backing storage и Unix-socket совместимость. ID проверять перед allocation. Запусков нет.
+   Unix-socket совместимость PVE. Backing extra-storage подтверждён; ID проверять перед allocation. Запусков нет.
 2. **Отдельное разрешение LAB:** создать только203/204 с fresh disks и без NIC;
    проверить custom QEMU Unix backend/no-leak до подключения lab NIC. Затем DNS,
    DHCP и реальный HTTP/HTTPS транзит между двумя fixture namespaces.
@@ -228,7 +244,7 @@ switch + boot + LAN приёмка. Сейчас нет оснований об�
 5. **Fail-Open — отдельное разрешение:** только после принятого независимого B recovery,
    конкретного downtime budget, armed host deadline и приёмочного протокола.
 
-BLOCKER: физическое backing extra-storage/backup и Unix-socket интеграция PVE не проверены;
+BLOCKER: независимость backup storage и Unix-socket интеграция PVE не проверены;
 VMID не зарезервированы; QGA отсутствует, serial recovery не испытан; нет принятого live host→guest
 credential; нет сетевого стенда и измеренного offline recovery; остановка202 не разрешена;
 не доказана загрузка production rescue; нет подтверждённого физического router/OOB.
