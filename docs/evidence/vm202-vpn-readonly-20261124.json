@@ -1,0 +1,533 @@
+{
+  "window_local": "2026-11-24 01:41–01:48 Asia/Yekaterinburg (+05)",
+  "base_commit": "ad501a52",
+  "scope": "read-only config/status/history + bounded diagnostic HTTP requests; no selector/config changes",
+  "aut": {
+    "same_server": true,
+    "all_except_tag_equal": true,
+    "uuid_equal": true,
+    "public_key_equal": true,
+    "short_id_equal": true,
+    "usa_aut_equal": true
+  },
+  "outbounds": [
+    {
+      "tag": "main-1-out",
+      "type": "vless",
+      "server": "aut.adeptpro.online",
+      "server_port": 443,
+      "flow": "xtls-rprx-vision",
+      "transport": {
+        "type": "tcp"
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "aut.adeptpro.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true
+        }
+      },
+      "outbounds": null,
+      "fallbacks": null,
+      "interval": null,
+      "url": null
+    },
+    {
+      "tag": "main-2-out",
+      "type": "vless",
+      "server": "aut.adeptpro.online",
+      "server_port": 443,
+      "flow": "xtls-rprx-vision",
+      "transport": {
+        "type": "tcp"
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "aut.adeptpro.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true
+        }
+      },
+      "outbounds": null,
+      "fallbacks": null,
+      "interval": null,
+      "url": null
+    },
+    {
+      "tag": "main-3-out",
+      "type": "vless",
+      "server": "oslo.adeptpro.online",
+      "server_port": 443,
+      "flow": "xtls-rprx-vision",
+      "transport": {
+        "type": "tcp"
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "oslo.adeptpro.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true
+        }
+      },
+      "outbounds": null,
+      "fallbacks": null,
+      "interval": null,
+      "url": null
+    },
+    {
+      "tag": "main-4-out",
+      "type": "vless",
+      "server": "on1x.adeptpro.online",
+      "server_port": 443,
+      "flow": "xtls-rprx-vision",
+      "transport": {
+        "type": "tcp"
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "on1x.adeptpro.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true
+        }
+      },
+      "outbounds": null,
+      "fallbacks": null,
+      "interval": null,
+      "url": null
+    },
+    {
+      "tag": "main-5-out",
+      "type": "hysteria2",
+      "server": "on1x.adeptpro.online",
+      "server_port": 443,
+      "flow": null,
+      "transport": {
+        "type": "quic/udp"
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "on1x.adeptpro.online",
+        "utls": null,
+        "reality": null
+      },
+      "outbounds": null,
+      "fallbacks": null,
+      "interval": null,
+      "url": null
+    },
+    {
+      "tag": "main-6-out",
+      "type": "vless",
+      "server": "ger.adeptpro.online",
+      "server_port": 443,
+      "flow": "xtls-rprx-vision",
+      "transport": {
+        "type": "tcp"
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "ger.adeptpro.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true
+        }
+      },
+      "outbounds": null,
+      "fallbacks": null,
+      "interval": null,
+      "url": null
+    },
+    {
+      "tag": "main-7-out",
+      "type": "hysteria2",
+      "server": "ger.adeptpro.online",
+      "server_port": 443,
+      "flow": null,
+      "transport": {
+        "type": "quic/udp"
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "ger.adeptpro.online",
+        "utls": null,
+        "reality": null
+      },
+      "outbounds": null,
+      "fallbacks": null,
+      "interval": null,
+      "url": null
+    },
+    {
+      "tag": "main-8-out",
+      "type": "vless",
+      "server": "swe.adeptpro.online",
+      "server_port": 443,
+      "flow": null,
+      "transport": {
+        "type": "xhttp",
+        "mode": "stream-up"
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "swe.adeptpro.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": null
+      },
+      "outbounds": null,
+      "fallbacks": null,
+      "interval": null,
+      "url": null
+    },
+    {
+      "tag": "main-urltest-out",
+      "type": "urltest",
+      "server": null,
+      "server_port": null,
+      "flow": null,
+      "transport": {
+        "type": "tcp"
+      },
+      "tls": null,
+      "outbounds": [
+        "main-1-out",
+        "main-2-out",
+        "main-3-out",
+        "main-4-out",
+        "main-5-out",
+        "main-6-out",
+        "main-7-out",
+        "main-8-out"
+      ],
+      "fallbacks": null,
+      "interval": "3m",
+      "url": "https://www.gstatic.com/generate_204"
+    },
+    {
+      "tag": "USA-1-out",
+      "type": "vless",
+      "server": "aut.adeptpro.online",
+      "server_port": 443,
+      "flow": "xtls-rprx-vision",
+      "transport": {
+        "type": "tcp"
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "aut.adeptpro.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true
+        }
+      },
+      "outbounds": null,
+      "fallbacks": null,
+      "interval": null,
+      "url": null
+    },
+    {
+      "tag": "USA-2-out",
+      "type": "vless",
+      "server": "swe.adeptpro.online",
+      "server_port": 443,
+      "flow": "xtls-rprx-vision",
+      "transport": {
+        "type": "tcp"
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "swe.adeptpro.online",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": null
+      },
+      "outbounds": null,
+      "fallbacks": null,
+      "interval": null,
+      "url": null
+    },
+    {
+      "tag": "USA-3-out",
+      "type": "hysteria2",
+      "server": "swe.adeptpro.online",
+      "server_port": 443,
+      "flow": null,
+      "transport": {
+        "type": "quic/udp"
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "swe.adeptpro.online",
+        "utls": null,
+        "reality": null
+      },
+      "outbounds": null,
+      "fallbacks": null,
+      "interval": null,
+      "url": null
+    },
+    {
+      "tag": "USA-urltest-out",
+      "type": "urltest",
+      "server": null,
+      "server_port": null,
+      "flow": null,
+      "transport": {
+        "type": "tcp"
+      },
+      "tls": null,
+      "outbounds": [
+        "USA-1-out",
+        "USA-2-out",
+        "USA-3-out"
+      ],
+      "fallbacks": null,
+      "interval": "3m",
+      "url": "https://www.gstatic.com/generate_204"
+    }
+  ],
+  "per_outbound_https": [
+    {
+      "tag": "main-1-out",
+      "delay": 205,
+      "message": null
+    },
+    {
+      "tag": "main-2-out",
+      "delay": 212,
+      "message": null
+    },
+    {
+      "tag": "main-6-out",
+      "delay": 147,
+      "message": null
+    },
+    {
+      "tag": "main-7-out",
+      "delay": 138,
+      "message": null
+    },
+    {
+      "tag": "main-8-out",
+      "delay": 140,
+      "message": null
+    },
+    {
+      "tag": "USA-2-out",
+      "delay": 146,
+      "message": null
+    },
+    {
+      "tag": "USA-3-out",
+      "delay": 146,
+      "message": null
+    },
+    {
+      "tag": "USA-1-out",
+      "delay": 233,
+      "message": null
+    }
+  ],
+  "direct_wan_https": 200,
+  "router_dns": "answered",
+  "discarded_probe": {
+    "protocol": "telnet",
+    "rc": 1,
+    "reason": "curl build does not support telnet; NOT a TCP failure"
+  },
+  "direct_tls_and_events": [
+    "PLAIN_TLS_CONTROL=aut.adeptpro.online",
+    "IP=185.211.103.130 TCP=0.074522 TLS=0.169378 TOTAL=0.243585 HTTP=200",
+    "CURL_RC=0",
+    "PLAIN_TLS_CONTROL=ger.adeptpro.online",
+    "IP=179.254.108.170 TCP=0.067941 TLS=0.158075 TOTAL=0.227179 HTTP=200",
+    "CURL_RC=0",
+    "Tue Nov 24 01:20:23 2026 user.notice podkop: [info] Podkop reload",
+    "Tue Nov 24 01:26:46 2026 daemon.err sing-box[330]: WARN[0380] outbound/urltest[main-urltest-out]: switched from outbound main-7-out to main-8-out",
+    "Tue Nov 24 01:32:42 2026 daemon.err sing-box[330]: WARN[0736] outbound/urltest[main-urltest-out]: switched from outbound main-8-out to main-6-out",
+    "Tue Nov 24 01:33:03 2026 daemon.err sing-box[330]: WARN[0756] outbound/urltest[main-urltest-out]: switched from outbound main-6-out to main-7-out",
+    "Tue Nov 24 01:34:02 2026 daemon.err sing-box[330]: WARN[0816] outbound/urltest[main-urltest-out]: switched from outbound main-7-out to main-2-out",
+    "Tue Nov 24 01:34:26 2026 daemon.err sing-box[330]: WARN[0840] outbound/urltest[main-urltest-out]: switched from outbound main-2-out to main-8-out",
+    "Tue Nov 24 01:35:47 2026 daemon.err sing-box[330]: WARN[0921] outbound/urltest[main-urltest-out]: switched from outbound main-8-out to main-6-out",
+    "Tue Nov 24 01:36:31 2026 daemon.err sing-box[330]: WARN[0965] outbound/urltest[main-urltest-out]: switched from outbound main-6-out to main-7-out",
+    "UPTIME=77903.92 65261.02",
+    "local default dev lo scope host ",
+    "{\"tag\":\"main-5-out\",\"type\":\"hysteria2\",\"transport\":\"quic/udp\",\"tls\":{\"enabled\":true,\"server_name\":\"on1x.adeptpro.online\",\"insecure\":false}}",
+    "{\"tag\":\"main-7-out\",\"type\":\"hysteria2\",\"transport\":\"quic/udp\",\"tls\":{\"enabled\":true,\"server_name\":\"ger.adeptpro.online\",\"insecure\":false}}",
+    "{\"tag\":\"USA-3-out\",\"type\":\"hysteria2\",\"transport\":\"quic/udp\",\"tls\":{\"enabled\":true,\"server_name\":\"swe.adeptpro.online\",\"insecure\":false}}",
+    ""
+  ],
+  "timeout_sample": [
+    {
+      "time": "Tue Nov 24 01:36:32 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:32 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:32 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:34 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:34 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:34 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:34 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:38 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:38 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:38 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:38 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:39 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:40 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:40 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:43 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:43 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:43 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:43 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:44 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:44 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:45 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:46 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:46 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:46 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    },
+    {
+      "time": "Tue Nov 24 01:36:46 2026",
+      "outbound": "main-6-out",
+      "error": "context deadline exceeded"
+    }
+  ],
+  "updater": "installed hashes equal incident a561f878/46eaef23; empty-USA defect still active",
+  "failsafe_sha256": "976b7ae5c5daecedafbeadf6bd90677df60d4039de542fc245cb27d2a94e2171",
+  "failsafe_upstream_equal": true,
+  "proxmox": {
+    "user": "codexops",
+    "pve_cluster": "active",
+    "systemd_run_available": true,
+    "root_systemd_run_not_granted": true,
+    "known_lab_wrapper_scope": [
+      203,
+      204
+    ],
+    "generic_guestctl_source": "not readable; VM202 recovery capability NOT proven"
+  },
+  "unverified": [
+    "server Xray versions/logs",
+    "64KiB throughput per node",
+    "LAN client transit",
+    "automatic VM202 recovery/terminal failsafe/hang"
+  ]
+}

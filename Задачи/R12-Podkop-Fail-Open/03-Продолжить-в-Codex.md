@@ -1,3 +1,21 @@
+## Read-only checkpoint 24.11, 01:41–01:48 +05
+
+[первый RO-анализ VM202](../../docs/vm202-vpn-readonly-20261124.ru.md). Ветка `codex/r12-vm202-prod-diagnostics-20261124`, исходный HEADad501a52.
+AUT main-1/main-2/USA-1 идентичны кромеtag и сейчас WORKING205/212/233ms; пять
+контролей также прошли HTTPS delay. on1x/Oslo — известные внешние причины владельца,
+не трогать. Историческая причина AUTN/A НЕ доказана, серверный Xray не прочитан.
+В свежих логах GermanyREALITY15–16s timeout и сменаURLTest; download_check1 сохранён.
+main автоURLTest; USA вручнуюUSA-2; DIRECT fallback в группах отсутствует.
+Updater hashes равны старому дефектному коду USA0; PR7 напрямую не ставить:
+его activation требует guard/DNS ownership(dont_touch_dhcp1), productionnative0.
+Failsafe hash совпадает с закреплённым upstream; root PVE recovery timer202 не
+подготовлен/не проверен. Fault injections STOP до recovery-gate и отдельного GO.
+Production не изменялась **этой диагностикой**; ручная установка владельца ранее — факт.
+Следующее: пассивная корреляция64KiB/выборов и серверные logs/version при существующем
+разрешённом доступе; проект независимого timed recovery сначала проверить наLAB.
+
+---
+
 # Актуальная точка продолжения для VS Code / Codex — 24.11.2026
 
 **Задача:** расследовать причины временного `N/A` и 15-секундных тайм-аутов URLTest на VM202, не смешивая их с доказанным инцидентом подписочного `USA=0`; спроектировать и затем по согласованию испытать штатный fail-safe `podkop-engine-full`.
