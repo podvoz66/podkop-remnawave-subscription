@@ -1,3 +1,20 @@
+# Актуальная точка продолжения для VS Code / Codex — 24.11.2026
+
+**Задача:** расследовать причины временного `N/A` и 15-секундных тайм-аутов URLTest на VM202, не смешивая их с доказанным инцидентом подписочного `USA=0`; спроектировать и затем по согласованию испытать штатный fail-safe `podkop-engine-full`.
+
+**Фактическое состояние:** OpenWrt25.12.4/Podkop0.7.24 + engine-full1.14.4-r28 на production VM202, sing-box running, `podkop-engine` failsafe running, `liveness=1`. 24.11 штатный STOP→DIRECT DNS→START, `sing-box check`, HTTP200 PASS. `N/A` для части main/USA; ошибки `main-6-out`, `main-1-out`, `main-2-out`; `urltest_download_check=1`. В 01:13 `podkop reload` объясняет PID смену, более поздний PID330 требует проверки uptime. Не было подтверждённого исполнения предлагаемого 18s watchdog/SIGKILL-теста. Подробный checkpoint: [документ](../../docs/vm202-production-rollout-20261124.ru.md).
+
+**Обязательные шаги Codex:**
+1. Прочитать `AGENTS.md`, `01-Задача-и-план.md`, `02-Ход-работы.md`, [новый checkpoint](../../docs/vm202-production-rollout-20261124.ru.md), [инцидент USA0](../../docs/incident-20261123-0800.ru.md). Отличать существующий Draft PR7 от вручную установленного пакета.
+2. Предложить компактный план проверки с gates, до новых production-действий запросить конкретное одобрение. Сначала **read-only** SSH/Proxmox: uptime/btime, procd PIDs/events, API URLTest, последние ошибки; сравнить с текущим состоянием пользователя.
+3. Исследовать две независимые гипотезы: (a) updater перезаписывает USA пустой подпиской, нужны атомарность/валидация/сохранение manual links; (b) URLTest `N/A`/timeout: DNS, end-to-end WAN, конкретные endpoints, TLS/REALITY/XHTTP/Hysteria2, необязательный `urltest_download_check`. Не менять секреты и не выводить UUID/токены/полные URL.
+4. Составить план безопасного fault-injection с реально действующим автоматическим recovery; **18 s не гарантируют terminal fail-open** (`procd respawn 600 5 5`; liveness 20s x3). Отдельно проверить single crash vs crash-loop vs DNS-hang, без reboot и без опасного host fencing без явного разрешения.
+5. Подготовить diff/доказательства/rollback и в конце короткий отчёт PASS/FAIL/UNVERIFIED. Не merge, не менять VM202, Podkop cron, DNS, fw4, Remnawave API и подписки без согласования. Работа в собственной GitHub-ветке.
+
+**Запрос к Codex:** начни с чтения checkpoint и read-only диагностики, покажи точную матрицу двух независимых дефектов и план теста fail-safe. Никаких изменений production до подтверждённого GO.
+
+---
+
 ## Актуально: реальные испытания podkop-engine, 2026-11-23
 
 [Полный LAB-отчёт, доказательства и ограничения](../../docs/lab-podkop-engine-results.ru.md).

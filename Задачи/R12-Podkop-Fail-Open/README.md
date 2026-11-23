@@ -1,5 +1,9 @@
 # R12 — Podkop Fail-Open VM202
 
+**Обновление 24.11.2026:** владелец отдельно установил `podkop-engine-full 1.14.4-r28` на production VM202 и подтвердил DNS/HTTPS/штатный STOP→DIRECT→START. Это не развёртывание экспериментальных R12 guards и **не** приёмка полного fail-open или независимого host rollback. В дальнейшем диагностика причин `N/A`/timeouts и отдельный контролируемый fail-safe тест через VS Code/Codex: [checkpoint](../../docs/vm202-production-rollout-20261124.ru.md), [продолжить](03-Продолжить-в-Codex.md).
+
+**Исторические ограничения Draft PR #7 ниже** относятся к неразвёрнутым R12 guards; новая ручная установка engine описана выше.
+
 **PRODUCTION NO-GO.** До отдельного разрешения никаких установок/перезапусков/изменений VM202 или PVE.
 Новый приоритет: [независимый rollback, Stage1/Stage2](../../docs/independent-rollback.ru.md).
 Предыдущий rollback через новый guard недостаточен. Нужен изолированный OpenWrt-стенд,
