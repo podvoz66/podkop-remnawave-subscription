@@ -1,0 +1,14 @@
+#!/bin/sh /etc/rc.common
+START=95
+STOP=10
+USE_PROCD=1
+start_service() {
+    # Keep the watchdog alive even if boot DNS/nft is temporarily unavailable.
+    /usr/bin/podkop-failover-guard boot || logger -t podkop-failover 'Boot transition incomplete: daemon will retry DIRECT'
+    procd_open_instance
+    procd_set_param command /usr/bin/podkop-failover-guard daemon
+    procd_set_param respawn 3600 5 5
+    procd_set_param stdout 0
+    procd_set_param stderr 0
+    procd_close_instance
+}

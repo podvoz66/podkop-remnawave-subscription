@@ -1,0 +1,7 @@
+udhcpc: started, v1.37.0
+udhcpc: broadcasting discover
+udhcpc: no lease, failing
+Start podkop
+service_triggers start
+SYNTHETIC_WRONG_UUID_CONFIGURED_BACKUP_RETAINED
+R12_GUEST_RC=0

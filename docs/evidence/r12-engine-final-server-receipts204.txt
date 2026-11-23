@@ -1,0 +1,12 @@
+ENGINE_LAB_ISOLATION_AND_SERVICES_PASS
+INDEPENDENT_SYNTHETIC_VLESS_SERVER_EVENTS={"VLESS_ACCEPT": 67, "AUTH_REJECT": 2}
+VLESS_ACCEPT_BY_PORT={"8001": 56, "8080": 6, "8443": 5}
+{"time": 1795459453.7479258, "event": "VLESS_ACCEPT", "port": 8080, "command": 1}
+{"time": 1795459453.766668, "event": "VLESS_ACCEPT", "port": 8443, "command": 1}
+{"time": 1795460225.9316127, "event": "VLESS_ACCEPT", "port": 8080, "command": 1}
+{"time": 1795460225.9490454, "event": "VLESS_ACCEPT", "port": 8443, "command": 1}
+{"time": 1795460709.032553, "event": "VLESS_ACCEPT", "port": 8080, "command": 1}
+{"time": 1795460709.0955794, "event": "VLESS_ACCEPT", "port": 8443, "command": 1}
+{"time": 1795460821.710572, "event": "VLESS_ACCEPT", "port": 8080, "command": 1}
+{"time": 1795460821.7298975, "event": "VLESS_ACCEPT", "port": 8443, "command": 1}
+R12_GUEST_RC=0

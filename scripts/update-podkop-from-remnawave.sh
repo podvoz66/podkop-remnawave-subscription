@@ -1,331 +1,126 @@
 #!/bin/sh
-set -eu
-
-CONF='/etc/podkop-remnawave/subscription.conf'
-PENDING_RUNTIME_RELOAD='/etc/podkop-remnawave/pending-runtime-reload'
-
-if [ ! -f "$CONF" ]; then
-  echo "[ERROR] Missing config: $CONF"
-  echo "[ERROR] Expected it to contain: SUB_URL='https://...'"
-  exit 1
-fi
-
-. "$CONF"
-
-if [ -z "${SUB_URL:-}" ]; then
-  echo "[ERROR] SUB_URL is empty in $CONF"
-  exit 1
-fi
-
-UCI_CFG='podkop'
-MAIN_SEC='main'
-USA_SEC='USA'
-MANAGED_SUFFIX='-rwsub'
-LINK_SCHEMES='(vless|ss|trojan|hysteria2|hy2)'
-
-UA='Podkop-OpenWrt/1.0'
-TIMEOUT='25'
-
-TMP_SUB="/tmp/remnawave-sub.$$"
-TMP_TXT="/tmp/remnawave-sub.$$.txt"
-TMP_ALL="/tmp/remnawave-links-all.$$.list"
-TMP_MAIN_SRC="/tmp/remnawave-links-main-src.$$.list"
-TMP_USA_SRC="/tmp/remnawave-links-usa-src.$$.list"
-TMP_MAIN_KEEP="/tmp/podkop-main-keep.$$.list"
-TMP_USA_KEEP="/tmp/podkop-usa-keep.$$.list"
-TMP_UCI="/tmp/podkop-uci.$$.batch"
-TMP_CANDIDATE_DIR=''
-
-cleanup() {
-  rm -f "$TMP_SUB" "$TMP_TXT" "$TMP_ALL" "$TMP_MAIN_SRC" "$TMP_USA_SRC" "$TMP_MAIN_KEEP" "$TMP_USA_KEEP" "$TMP_UCI"
-  [ -z "$TMP_CANDIDATE_DIR" ] || rm -rf "$TMP_CANDIDATE_DIR"
+# Transactional replacement for installed .real.sh. Never edits cron.
+set -u
+DRY_RUN=0
+case "${1:-}" in '') ;; --dry-run) DRY_RUN=1;; *) echo 'Usage: update-podkop-from-remnawave.sh [--dry-run]'; exit 2;; esac
+[ -r "${GUARD_LIB:-/usr/lib/podkop-failover.sh}" ] || {
+    echo 'Updater unavailable: approved Fail-Open migration required; existing keys unchanged' >&2
+    exit 78
 }
-trap cleanup EXIT
-
-section_exists() {
-  sec="$1"
-  uci -q show "${UCI_CFG}.${sec}" >/dev/null 2>&1
-}
-
-ensure_section() {
-  sec="$1"
-
-  if ! section_exists "$sec"; then
-    echo "[INFO] Creating podkop.${sec} section"
-    anon="$(uci add "$UCI_CFG" section)"
-    uci rename "${UCI_CFG}.${anon}=${sec}"
-  fi
-}
-
-normalize_links() {
-  # Add Reality spiderX parameter only to VLESS Reality links.
-  # Non-VLESS links must remain unchanged.
-  sed '/^vless:\/\// { /security=reality/ { /[?&]spx=/! s/#/\&spx=%2F#/; } }'
-}
-
-mark_managed_link() {
-  link="$1"
-
-  case "$link" in
-    *"${MANAGED_SUFFIX}") printf '%s\n' "$link" ;;
-    *\#*) printf '%s\n' "$(printf '%s' "$link" | sed "s/#\([^#[:space:]]*\)$/#\1${MANAGED_SUFFIX}/")" ;;
-    *) printf '%s\n' "${link}#rwsub" ;;
-  esac
-}
-
-is_managed_link() {
-  link="$1"
-
-  case "$link" in
-    *"${MANAGED_SUFFIX}"|*"#rwsub") return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-strip_managed_marker() {
-  sed "s/${MANAGED_SUFFIX}$//; s/#rwsub$//"
-}
-
-collect_manual_links() {
-  sec="$1"
-  current_src_file="$2"
-  output_file="$3"
-
-  : > "$output_file"
-
-  if ! section_exists "$sec"; then
-    return 0
-  fi
-
-  uci -q get "${UCI_CFG}.${sec}.urltest_proxy_links" 2>/dev/null \
-    | tr ' ' '\n' \
-    | grep -E "^${LINK_SCHEMES}://" \
-    | while IFS= read -r link; do
-        [ -n "$link" ] || continue
-
-        if is_managed_link "$link"; then
-          continue
-        fi
-
-        norm="$(printf '%s\n' "$link" | strip_managed_marker)"
-
-        if grep -Fxq "$norm" "$current_src_file" 2>/dev/null; then
-          continue
-        fi
-
-        printf '%s\n' "$link"
-      done >> "$output_file" || true
-}
-
-write_urltest_section() {
-  sec="$1"
-  keep_file="$2"
-  managed_src_file="$3"
-
-  echo "set ${UCI_CFG}.${sec}.connection_type='proxy'"
-  echo "set ${UCI_CFG}.${sec}.proxy_config_type='urltest'"
-  echo "del ${UCI_CFG}.${sec}.proxy_string"
-  echo "del ${UCI_CFG}.${sec}.urltest_proxy_links"
-
-  if [ -s "$keep_file" ]; then
-    while IFS= read -r link; do
-      [ -n "$link" ] || continue
-      esc="$(printf "%s" "$link" | sed "s/'/'\\\\''/g")"
-      echo "add_list ${UCI_CFG}.${sec}.urltest_proxy_links='${esc}'"
-    done < "$keep_file"
-  fi
-
-  if [ -s "$managed_src_file" ]; then
-    while IFS= read -r link; do
-      [ -n "$link" ] || continue
-      marked="$(mark_managed_link "$link")"
-      esc="$(printf "%s" "$marked" | sed "s/'/'\\\\''/g")"
-      echo "add_list ${UCI_CFG}.${sec}.urltest_proxy_links='${esc}'"
-    done < "$managed_src_file"
-  fi
-
-  echo "set ${UCI_CFG}.${sec}.urltest_check_interval='3m'"
-  echo "set ${UCI_CFG}.${sec}.urltest_tolerance='50'"
-  echo "set ${UCI_CFG}.${sec}.urltest_testing_url='https://www.gstatic.com/generate_204'"
-}
-
-echo "[INFO] Downloading Remnawave subscription..."
-
-curl -fsSL \
-  --connect-timeout "$TIMEOUT" \
-  --max-time "$TIMEOUT" \
-  -H "User-Agent: $UA" \
-  -H "Accept: */*" \
-  "$SUB_URL" \
-  -o "$TMP_SUB"
-
-if grep -Eq "${LINK_SCHEMES}://" "$TMP_SUB"; then
-  cp "$TMP_SUB" "$TMP_TXT"
-else
-  if base64 -d "$TMP_SUB" > "$TMP_TXT" 2>/dev/null; then
-    :
-  else
-    echo "[ERROR] Cannot decode subscription as base64 and no supported proxy links found."
+. "${GUARD_LIB:-/usr/lib/podkop-failover.sh}"
+guard_setup
+exec 8>"$R/var/lock/podkop-subscription.lock"
+flock -n 8 || exit 75
+work=$(mktemp -d "$CFG/.subscription.XXXXXX") || exit 1
+trap 'rm -rf "$work"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+mkdir "$work/.uci"
+die() {
+    [ "$DRY_RUN" = 1 ] || event "$1"
+    printf '%s\n' "$1" >&2
     exit 1
-  fi
+}
+if [ -f "$DATA/transaction/pending" ]; then
+    die 'Update blocked: unfinished transaction; guard recovery required'
 fi
-
-grep -Eo "${LINK_SCHEMES}://[^[:space:]]+" "$TMP_TXT" \
-  | normalize_links \
-  > "$TMP_ALL" || true
-
-if [ ! -s "$TMP_ALL" ]; then
-  echo "[ERROR] No supported proxy links found in subscription."
-  exit 1
+conf=${CONF:-$R/etc/podkop-remnawave/subscription.conf}
+# Read a literal assignment, never execute subscription.conf.
+sub_url=$(sed -n "s/^[[:space:]]*SUB_URL='\([^']*\)'[[:space:]]*$/\1/p" "$conf" 2>/dev/null)
+[ -n "$sub_url" ] || die 'Update rejected: missing literal subscription URL'
+case "$sub_url" in https://*) ;; *) die 'Update rejected: HTTPS subscription required';; esac
+case "$sub_url" in *'"'*|*'\'*|*'
+'*) die 'Update rejected: invalid subscription URL';; esac
+printf 'url = "%s"\n' "$sub_url" > "$work/curl.conf"
+if ! curl -fsSL --proto '=https' --proto-redir '=https' --connect-timeout 8 --max-time 25 \
+    --max-filesize 1048576 --config "$work/curl.conf" -o "$work/body" 2>/dev/null; then
+    die 'Update rejected: subscription download failed'
 fi
-
-# Safety guard: never apply Remnawave placeholder links to Podkop.
-# This must happen before backup and before any UCI changes.
-if grep -Eq '@0\.0\.0\.0:1|00000000-0000-0000-0000-000000000000|App%20not%20supported|App not supported' "$TMP_ALL"; then
-  echo "[ERROR] Subscription returned placeholder / App not supported link."
-  echo "[ERROR] Refusing to apply invalid links to Podkop."
-  echo "[ERROR] Fix Remnawave user/squad/hosts/HWID/subscription settings first, then rerun."
-  exit 1
+[ -s "$work/body" ] || die 'Update rejected: empty subscription'
+if grep -Eq '^(vless|ss|trojan|hysteria2|hy2)://' "$work/body"; then
+    cp "$work/body" "$work/decoded"
+elif ! base64 -d "$work/body" > "$work/decoded" 2>/dev/null; then
+    die 'Update rejected: invalid subscription encoding'
 fi
-
-USA_EXISTS=0
-if section_exists "$USA_SEC"; then
-  USA_EXISTS=1
+tr -d '\r' < "$work/decoded" | sed '/^[[:space:]]*$/d' > "$work/links"
+[ -s "$work/links" ] || die 'Update rejected: no supported links'
+[ "$(wc -l < "$work/links")" -le 128 ] || die 'Update rejected: too many links'
+if ! awk 'length($0)>4096 {exit 1}' "$work/links"; then die 'Update rejected: oversized link'; fi
+if grep -Ev '^(vless|ss|trojan|hysteria2|hy2)://[^[:space:]]+$' "$work/links" >/dev/null; then
+    die 'Update rejected: unexpected subscription structure'
 fi
-
-if [ "$USA_EXISTS" -eq 1 ]; then
-  grep -E '@us\.adeptpro\.online:443|#.*us|#.*US|#.*usa|#.*USA' "$TMP_ALL" > "$TMP_USA_SRC" || true
-  grep -Ev '@us\.adeptpro\.online:443|#.*us|#.*US|#.*usa|#.*USA' "$TMP_ALL" > "$TMP_MAIN_SRC" || true
-else
-  cp "$TMP_ALL" "$TMP_MAIN_SRC"
-  : > "$TMP_USA_SRC"
+if [ -n "$(uci -c "$CFG" -q changes podkop 2>/dev/null)" ] ||
+   [ -n "$(uci -c "$CFG" -q changes dhcp 2>/dev/null)" ]; then
+    die 'Update rejected: pending UCI changes'
 fi
-
-ALL_COUNT="$(wc -l < "$TMP_ALL" | tr -d ' ')"
-VLESS_COUNT="$(grep -c '^vless://' "$TMP_ALL" 2>/dev/null || true)"
-SS_COUNT="$(grep -c '^ss://' "$TMP_ALL" 2>/dev/null || true)"
-TROJAN_COUNT="$(grep -c '^trojan://' "$TMP_ALL" 2>/dev/null || true)"
-HY2_COUNT="$(grep -cE '^(hysteria2|hy2)://' "$TMP_ALL" 2>/dev/null || true)"
-MAIN_RW_COUNT="$(wc -l < "$TMP_MAIN_SRC" | tr -d ' ')"
-USA_RW_COUNT="$(wc -l < "$TMP_USA_SRC" | tr -d ' ')"
-
-echo "[INFO] Found subscription links total: $ALL_COUNT"
-echo "[INFO] Found VLESS links: $VLESS_COUNT"
-echo "[INFO] Found Shadowsocks links: $SS_COUNT"
-echo "[INFO] Found Trojan links: $TROJAN_COUNT"
-echo "[INFO] Found Hysteria2 links: $HY2_COUNT"
-echo "[INFO] USA section exists: $USA_EXISTS"
-echo "[INFO] Remnawave links for main: $MAIN_RW_COUNT"
-echo "[INFO] Remnawave links for USA: $USA_RW_COUNT"
-
-if [ "$ALL_COUNT" -lt 1 ]; then
-  echo "[ERROR] Subscription contains no supported proxy links. Refusing to apply."
-  exit 1
+cp -p "$CFG/podkop" "$work/podkop" || die 'Update rejected: cannot stage config'
+original_hash=$(sha256sum "$work/podkop" | awk '{print $1}')
+for section in $REQUIRED_SECTIONS; do
+    case "$section" in main|USA) ;; *) die 'Update rejected: unsupported section mapping';; esac
+    : > "$work/$section.new"
+done
+while IFS= read -r link; do
+    section=main
+    if printf '%s\n' "$link" | grep -Eiq '@us\.adeptpro\.online:443([/?#]|$)|#(us|usa)([-_%]|$)|#us-direct-reality'; then section=USA; fi
+    case "$link" in
+        vless://*security=reality*)
+            case "$link" in *'spx='*) ;; *'#'*) link=$(printf '%s' "$link" | sed 's/#/\&spx=%2F#/');; esac ;;
+    esac
+    case "$link" in *-rwsub|*'#rwsub') ;; *'#'*) link="$link-rwsub";; *) link="$link#rwsub";; esac
+    printf '%s\n' "$link" >> "$work/$section.new"
+done < "$work/links"
+for section in $REQUIRED_SECTIONS; do
+    [ -s "$work/$section.new" ] || die 'Update rejected: required subscription section empty'
+    uci -c "$work" -t "$work/.uci" -q show "podkop.$section" >/dev/null 2>&1 || die 'Update rejected: required section missing'
+    old=$(uget "$work" "podkop.$section.urltest_proxy_links" 2>/dev/null || true)
+    printf '%s\n' "$old" | tr ' ' '\n' | while IFS= read -r link; do
+        case "$link" in ''|*-rwsub|*'#rwsub') continue;; esac
+        printf '%s\n' "$link"
+    done >> "$work/$section.new"
+    awk '!seen[$0]++' "$work/$section.new" > "$work/$section.final"
+    uci -c "$work" -t "$work/.uci" -q delete "podkop.$section.urltest_proxy_links" || true
+    while IFS= read -r link; do
+        case "$link" in *"'"*|*'"'*|*'\'*) die 'Update rejected: unsafe link encoding';; esac
+        uci -c "$work" -t "$work/.uci" add_list "podkop.$section.urltest_proxy_links=$link" >/dev/null 2>&1 || die 'Update rejected: candidate UCI error'
+    done < "$work/$section.final"
+done
+uci -c "$work" -t "$work/.uci" commit podkop >/dev/null 2>&1 || die 'Update rejected: candidate commit failed'
+validate_sections "$work" || die 'Update rejected: invalid section configuration'
+if [ "$DRY_RUN" = 1 ]; then
+    make_probe_config "$work" "$work/probe.json" >/dev/null 2>&1 || die 'Dry-run rejected: sing-box config invalid'
+    echo 'Dry-run OK: nonempty sections, manual links preserved, sing-box check passed'
+    exit 0
 fi
-
-MAIN_EXISTS=0
-if section_exists "$MAIN_SEC"; then
-  MAIN_EXISTS=1
+shadow_health "$work" || die 'Update rejected: candidate WAN or required VPN HTTP probes failed'
+uci -c "$CFG" -q show podkop > "$work/current.state"
+uci -c "$work" -t "$work/.uci" -q show podkop > "$work/candidate.state"
+if cmp -s "$work/current.state" "$work/candidate.state"; then
+    event 'Subscription unchanged: runtime untouched'
+    exit 0
 fi
-
-collect_manual_links "$MAIN_SEC" "$TMP_MAIN_SRC" "$TMP_MAIN_KEEP"
-
-if [ "$USA_EXISTS" -eq 1 ]; then
-  collect_manual_links "$USA_SEC" "$TMP_USA_SRC" "$TMP_USA_KEEP"
+[ -f "$DATA/normal-dns/dhcp" ] || die 'Update rejected: run approved guard prepare first'
+lock_control || exit 75
+[ "$original_hash" = "$(sha256sum "$CFG/podkop" | awk '{print $1}')" ] || die 'Update rejected: configuration changed concurrently'
+[ -z "$(uci -c "$CFG" -q changes podkop 2>/dev/null)" ] &&
+[ -z "$(uci -c "$CFG" -q changes dhcp 2>/dev/null)" ] || die 'Update rejected: pending UCI changes after preflight'
+backup_transaction || die 'Update rejected: backup failed'
+if ! fail_open; then
+    recover_transaction || true
+    die 'Update aborted: could not establish DIRECT safely'
 fi
-
-MAIN_MANUAL_COUNT="$(wc -l < "$TMP_MAIN_KEEP" | tr -d ' ')"
-USA_MANUAL_COUNT=0
-
-if [ "$USA_EXISTS" -eq 1 ]; then
-  USA_MANUAL_COUNT="$(wc -l < "$TMP_USA_KEEP" | tr -d ' ')"
+if ! atomic_copy "$work/podkop" "$CFG/podkop"; then
+    recover_transaction || true
+    die 'Update aborted: atomic config replacement failed'
 fi
-
-echo "[INFO] Preserved manual links in main: $MAIN_MANUAL_COUNT"
-
-if [ "$USA_EXISTS" -eq 1 ]; then
-  echo "[INFO] Preserved manual links in USA: $USA_MANUAL_COUNT"
+if [ -f "$DATA/manual-direct" ]; then
+    rm -f "$DATA/transaction/pending"
+    event 'Subscription committed: manual DIRECT preserved; candidate HTTP probes passed'
+    exit 0
 fi
-
-if [ "$MAIN_RW_COUNT" -eq 0 ] && [ "$MAIN_MANUAL_COUNT" -eq 0 ]; then
-  echo "[ERROR] main section would become empty. Refusing to apply."
-  echo "[ERROR] Add at least one non-USA link, remove USA-only split, or add manual main link."
-  exit 1
+if activate_normal; then
+    rm -f "$DATA/transaction/pending"
+    event 'Subscription committed: main and USA HTTP probes passed'
+    exit 0
 fi
-
-{
-  if [ "$MAIN_EXISTS" -eq 0 ]; then
-    echo "set ${UCI_CFG}.${MAIN_SEC}=section"
-  fi
-
-  write_urltest_section "$MAIN_SEC" "$TMP_MAIN_KEEP" "$TMP_MAIN_SRC"
-
-  if [ "$USA_EXISTS" -eq 1 ]; then
-    if [ "$USA_RW_COUNT" -gt 0 ] || [ "$USA_MANUAL_COUNT" -gt 0 ]; then
-      write_urltest_section "$USA_SEC" "$TMP_USA_KEEP" "$TMP_USA_SRC"
-    else
-      echo "[INFO] USA section exists but has no links. Leaving it unchanged." >&2
-    fi
-  fi
-
-  echo "commit ${UCI_CFG}"
-} > "$TMP_UCI"
-
-if uci -q changes "$UCI_CFG" | grep -q .; then
-  echo "[ERROR] Pending Podkop UCI changes detected. Refusing semantic comparison."
-  exit 1
-fi
-
-TMP_CANDIDATE_DIR="$(mktemp -d /tmp/podkop-remnawave-candidate.XXXXXX)"
-chmod 700 "$TMP_CANDIDATE_DIR"
-mkdir "$TMP_CANDIDATE_DIR/.uci"
-cp /etc/config/podkop "$TMP_CANDIDATE_DIR/podkop"
-
-if ! uci -c "$TMP_CANDIDATE_DIR" -t "$TMP_CANDIDATE_DIR/.uci" -q batch < "$TMP_UCI"; then
-  echo "[ERROR] Cannot build isolated Podkop candidate state."
-  exit 1
-fi
-
-uci -q show "$UCI_CFG" > "$TMP_CANDIDATE_DIR/current.state"
-uci -c "$TMP_CANDIDATE_DIR" -t "$TMP_CANDIDATE_DIR/.uci" -q show "$UCI_CFG" > "$TMP_CANDIDATE_DIR/candidate.state"
-
-if cmp -s "$TMP_CANDIDATE_DIR/current.state" "$TMP_CANDIDATE_DIR/candidate.state"; then
-  RESTART_REQUIRED=NO
-  LOG_MSG="RemnaWave managed configuration unchanged; runtime remains untouched"
-  echo "[INFO] $LOG_MSG"
-  logger -t remnawave-update "$LOG_MSG" 2>/dev/null || true
-  echo "CONFIG_CHANGED=NO"
-  echo "UCI_COMMIT=NO"
-  echo "PODKOP_RESTART=NO"
-  echo "SINGBOX_RESTART=NO"
-  echo "SINGBOX_KILL=NO"
-else
-  RESTART_REQUIRED=NO
-  LOG_MSG="RemnaWave managed configuration changed; applying with deferred runtime reload"
-  echo "[INFO] $LOG_MSG"
-  logger -t remnawave-update "$LOG_MSG" 2>/dev/null || true
-
-  BACKUP="/etc/config/podkop.backup.$(date +%Y%m%d-%H%M%S)"
-  cp /etc/config/podkop "$BACKUP"
-  echo "[INFO] Backup saved: $BACKUP"
-
-  uci -q batch < "$TMP_UCI"
-  mkdir -p "$(dirname "$PENDING_RUNTIME_RELOAD")"
-  config_hash="$(uci -q show "$UCI_CFG" | sha256sum | awk '{print $1}')"
-  marker_tmp="${PENDING_RUNTIME_RELOAD}.tmp.$$"
-  {
-    printf 'UPDATED_AT=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-    printf 'CONFIG_HASH=%s\n' "$config_hash"
-    printf 'RUNTIME_RELOAD_REQUIRED=YES\n'
-  } > "$marker_tmp"
-  chmod 600 "$marker_tmp"
-  mv "$marker_tmp" "$PENDING_RUNTIME_RELOAD"
-  echo "CONFIG_CHANGED=YES"
-  echo "CONFIG_COMMITTED=YES"
-  echo "RUNTIME_RELOAD_DEFERRED=YES"
-  echo "PODKOP_RESTART=NO"
-  echo "SINGBOX_RESTART=NO"
-  echo "SINGBOX_KILL=NO"
-fi
-
-echo "[OK] RemnaWave update cycle completed. RESTART_REQUIRED=$RESTART_REQUIRED"
+recover_transaction || die 'CRITICAL: rollback incomplete; manual console required'
+die 'Update rolled back: previous keys retained; DIRECT until verified recovery'

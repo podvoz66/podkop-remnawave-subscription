@@ -1,0 +1,2 @@
+{"id": "r12e-t2-1795459495", "expected_path": "DIRECT", "time": 1795459495.3226626, "dns_udp": "10.253.203.1", "dns_tcp": "10.253.203.1", "upstream_dns_udp_tcp": ["10.253.203.1", "10.253.203.1"], "http": {"status": 200, "peer": "10.253.203.2", "tls_verified": false}, "https": {"status": 200, "peer": "10.253.203.2", "tls_verified": true}, "result": "PASS"}
+R12_GUEST_RC=0

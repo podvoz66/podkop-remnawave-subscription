@@ -1,0 +1,11 @@
+INSTALLED_PACKAGE_COUNT=198
+podkop: Domain routing. Use of VLESS, Shadowsocks technologies
+podkop: https://podkop.net
+podkop: 188 KiB
+podkop-engine: Unofficial build of sing-box for podkop, not affiliated with the sing-box project. Patched REALITY client (X25519MLKEM768 key share, Xray-core 26.9+ servers), Firefox 148 / Safari 26.3 uTLS fingerprints. Only what podkop uses: inbounds tproxy, direct and mixed; outbounds direct, socks, shadowsocks, trojan, vless, hysteria2, tuic, selector and urltest, and http for a local HTTP proxy. Other outbounds: podkop-engine-full. Build tags: with_quic,with_utls,with_clash_api,podkop_slim.
+podkop-engine: https://github.com/SagerNet/sing-box
+podkop-engine: 24 MiB
+ROOT_FREE_KIB=38160
+LAB203_NO_EXTERNAL_DEFAULT_ROUTES
+R12_GUEST_ROLLBACK_ASSETS_OK_NOT_HOST_RECOVERY
+R12_GUEST_RC=0

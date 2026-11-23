@@ -1,0 +1,77 @@
+{
+  "openwrt": "25.12.4",
+  "kernel": "6.12.87-1-d037e17efc2c7cd4972f63d6de88677f",
+  "complete_dependency_closure": false,
+  "packages": [
+    {
+      "filename": "bind-dig-9.20.31-r1.apk",
+      "bytes": 52527,
+      "sha256": "303145ebc203d8d14e16be047c0748695c0369b3b24670dee7d4548081bfe60d",
+      "signature": "NOT_YET_VERIFIED",
+      "architecture": "metadata verification pending; official x86_64 feed (Podkop noarch)",
+      "published_digest_status": "LOCAL_SHA256_ONLY"
+    },
+    {
+      "filename": "coreutils-base64-9.9-r2.apk",
+      "bytes": 17565,
+      "sha256": "5f8e6073e8074515830789aff5adb5601447468b62643016fd277ec3dd7e16f4",
+      "signature": "NOT_YET_VERIFIED",
+      "architecture": "metadata verification pending; official x86_64 feed (Podkop noarch)",
+      "published_digest_status": "LOCAL_SHA256_ONLY"
+    },
+    {
+      "filename": "curl-8.23.0-r1.apk",
+      "bytes": 74443,
+      "sha256": "4b5b4df03fb82b55bb97a964bd2d704df0bf6facdfa4aa6146a66dfe619661bf",
+      "signature": "NOT_YET_VERIFIED",
+      "architecture": "metadata verification pending; official x86_64 feed (Podkop noarch)",
+      "published_digest_status": "LOCAL_SHA256_ONLY"
+    },
+    {
+      "filename": "flock-2.41.5-r1.apk",
+      "bytes": 11895,
+      "sha256": "2beb095dd74e47e6545af914d4a19d3f575fa1dd597882aa31624055050d82f3",
+      "signature": "NOT_YET_VERIFIED",
+      "architecture": "metadata verification pending; official x86_64 feed (Podkop noarch)",
+      "published_digest_status": "LOCAL_SHA256_ONLY"
+    },
+    {
+      "filename": "jq-1.8.1-r2.apk",
+      "bytes": 145802,
+      "sha256": "22bfc1d4252912c0f4f5682e9dbbcfa084394281802b47816dfc3a122eb463a1",
+      "signature": "NOT_YET_VERIFIED",
+      "architecture": "metadata verification pending; official x86_64 feed (Podkop noarch)",
+      "published_digest_status": "LOCAL_SHA256_ONLY"
+    },
+    {
+      "filename": "kmod-nft-tproxy-6.12.87-r1.apk",
+      "bytes": 3451,
+      "sha256": "3d63272a15450a2ca92d7dfdc416094f0041f592acca5635299eb9f7592a428e",
+      "signature": "NOT_YET_VERIFIED",
+      "architecture": "metadata verification pending; official x86_64 feed (Podkop noarch)",
+      "published_digest_status": "OPENWRT_TARGET_SHA256_MATCH"
+    },
+    {
+      "filename": "podkop-0.7.24-r1.apk",
+      "bytes": 36987,
+      "sha256": "a444a784a7dc22b2ba17336b773f75b27861daf3fb358fea21b31935a975318e",
+      "signature": "NOT_YET_VERIFIED",
+      "architecture": "metadata verification pending; official x86_64 feed (Podkop noarch)",
+      "published_digest_status": "GITHUB_ASSET_SHA256_MATCH"
+    },
+    {
+      "filename": "sing-box-1.13.21-r1.apk",
+      "bytes": 17218027,
+      "sha256": "e76298c3581918adae1e7da49d293b221fa14cb082bf3ca1d1b80b2e9f7b0964",
+      "signature": "NOT_YET_VERIFIED",
+      "architecture": "metadata verification pending; official x86_64 feed (Podkop noarch)",
+      "published_digest_status": "LOCAL_SHA256_ONLY"
+    }
+  ],
+  "sources": {
+    "podkop": "https://github.com/itdoginfo/podkop/releases/tag/0.7.24",
+    "openwrt": "https://downloads.openwrt.org/releases/25.12.4/",
+    "dependencies": "https://github.com/itdoginfo/podkop/blob/0.7.24/podkop/Makefile"
+  },
+  "status": "NOT_INSTALL_READY: dependency closure, APK metadata and signatures pending"
+}

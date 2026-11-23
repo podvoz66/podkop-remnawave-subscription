@@ -1,0 +1,57 @@
+DNS_SERVER=127.0.0.42
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 12464
+;; flags: qr aa rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 0
+
+;; ANSWER SECTION:
+vpn.r12.test.		60	IN	A	198.18.0.3
+
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 224
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 0
+
+;; ANSWER SECTION:
+check-plain.r12.test.	0	IN	A	10.253.203.1
+
+DNS_SERVER=10.253.202.1
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 40477
+;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 64651
+;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+PRIMARY_WITH_EDNS
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 13936
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 0
+
+;; ANSWER SECTION:
+check-plain.r12.test.	0	IN	A	10.253.203.1
+
+PRIMARY_NO_EDNS
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 31184
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 0
+
+;; ANSWER SECTION:
+check-plain.r12.test.	0	IN	A	10.253.203.1
+
+Mon Nov 23 18:16:23 2026 daemon.err sing-box[7310]: ERROR[0034] dns: server dns-server: 6 more exchanges failed in 10s, the last for github.com. IN A: context deadline exceeded
+Mon Nov 23 18:16:33 2026 daemon.err sing-box[7310]: ERROR[0044] dns: server dns-server: 6 more exchanges failed in 10s, the last for github.com. IN A: context deadline exceeded
+Mon Nov 23 18:16:43 2026 daemon.err sing-box[7310]: ERROR[0054] dns: server dns-server: 4 more exchanges failed in 10s, the last for github.com. IN A: dial UDP connection: dial udp 10.253.203.1:5353: i/o timeout
+Mon Nov 23 18:16:53 2026 daemon.err sing-box[7310]: ERROR[0064] dns: server dns-server: 3 more exchanges failed in 10s, the last for github.com. IN A: context deadline exceeded
+Mon Nov 23 18:17:03 2026 daemon.err sing-box[7310]: ERROR[0074] dns: server dns-server: 6 more exchanges failed in 10s, the last for github.com. IN A: context deadline exceeded
+Mon Nov 23 18:17:13 2026 daemon.err sing-box[7310]: ERROR[0084] dns: server dns-server: 6 more exchanges failed in 10s, the last for github.com. IN A: context deadline exceeded
+Mon Nov 23 18:17:23 2026 daemon.err sing-box[7310]: ERROR[0094] dns: server dns-server: 4 more exchanges failed in 10s, the last for github.com. IN A: context deadline exceeded
+Mon Nov 23 18:17:37 2026 daemon.err sing-box[7310]: ERROR[0108] [324133165 10.0s] dns: server dns-server: exchange failed for 3.openwrt.pool.ntp.org. IN A: context deadline exceeded
+Mon Nov 23 18:17:47 2026 daemon.err sing-box[7310]: ERROR[0118] dns: server dns-server: 6 more exchanges failed in 10s, the last for 2.openwrt.pool.ntp.org. IN A: context deadline exceeded
+Mon Nov 23 18:17:57 2026 daemon.err sing-box[7310]: ERROR[0128] dns: server dns-server: 6 more exchanges failed in 10s, the last for 0.openwrt.pool.ntp.org. IN A: context deadline exceeded
+Mon Nov 23 18:22:10 2026 daemon.err sing-box[7310]: ERROR[0380] [3041038871 10.0s] dns: server dns-server: exchange failed for 3.openwrt.pool.ntp.org. IN A: context deadline exceeded
+Mon Nov 23 18:22:20 2026 daemon.err sing-box[7310]: ERROR[0390] dns: server dns-server: 5 more exchanges failed in 10s, the last for 2.openwrt.pool.ntp.org. IN A: context deadline exceeded
+R12_GUEST_RC=0

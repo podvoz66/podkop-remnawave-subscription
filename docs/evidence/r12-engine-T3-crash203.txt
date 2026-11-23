@@ -1,0 +1,11 @@
+GUEST_SING_BOX_CRASH=1
+GUEST_SING_BOX_CRASH=2
+GUEST_SING_BOX_CRASH=3
+GUEST_SING_BOX_CRASH=4
+GUEST_SING_BOX_CRASH=5
+GUEST_SING_BOX_CRASH=6
+2026-11-23 18:46:42 +0000
+sing-box went down for good; MemTotal 986 MB, MemAvailable 867 MB; /tmp 25 of 493 MB; /tmp/sing-box/cache.db 0.0 MB; largest: rpcd 1 MB, netifd 1 MB, uhttpd 1 MB
+sing-box keeps crashing and procd stopped restarting it; stopping podkop so that DNS works without it
+TERMINAL_FAILSAFE_DIRECT_CONFIGURATION_PASS
+R12_GUEST_RC=0

@@ -1,5 +1,9 @@
 # AdeptPro Bootstrap v2
 
+Разработка Fail-Open для VM202: [миграция, тесты и rollback](docs/fail-open.ru.md).
+Транзакционный updater требует новой guard-библиотеки и согласованного внедрения;
+не публиковать эту ветку в production bootstrap mirror как общее обновление.
+
 Production-заготовка автоматического ввода OpenWrt-роутеров с Podkop,
 Remnawave subscription sync и прямым администрированием через Tailscale. Этот PR
 только готовит GitHub-репозиторий и static mirror layout — production не меняется.

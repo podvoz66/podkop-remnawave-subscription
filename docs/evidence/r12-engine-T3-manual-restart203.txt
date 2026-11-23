@@ -1,0 +1,4 @@
+Start podkop
+service_triggers start
+NATIVE_START_COMPLETED
+R12_GUEST_RC=0

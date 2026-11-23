@@ -1,0 +1,110 @@
+{
+	"sing-box": {
+		"instances": {
+			"sing-box.main": {
+				"running": true,
+				"pid": 11605,
+				"command": [
+					"/usr/bin/sing-box",
+					"run",
+					"-c",
+					"/etc/sing-box/config.json",
+					"-D",
+					"/usr/share/sing-box",
+					"--disable-color"
+				],
+				"term_timeout": 15,
+				"env": {
+					"SING_BOX_DNS_FALLBACK": "ubus",
+					"SING_BOX_RULESET_RECOVERED_HOOK": "/usr/libexec/podkop-engine/lists-recovered",
+					"SING_BOX_URLTEST_DOWNLOAD_URL": "http://10.253.203.1:8001/probe64k"
+				},
+				"limits": {
+					"nofile": "65536 65536"
+				},
+				"respawn": {
+					"threshold": 600,
+					"timeout": 5,
+					"retry": 5
+				},
+				"user": "root"
+			}
+		}
+	}
+}
+#!/bin/sh /etc/rc.common
+
+USE_PROCD=1
+START=99
+
+script=$(readlink "$initscript")
+NAME="$(basename ${script:-$initscript})"
+PROG="/usr/bin/sing-box"
+
+start_service() {
+	config_load "$NAME"
+
+	local enabled user group conffile workdir ifaces
+	config_get_bool enabled "main" "enabled" "0"
+	[ "$enabled" -eq "1" ] || return 0
+
+	config_get user "main" "user" "root"
+	config_get conffile "main" "conffile"
+	config_get ifaces "main" "ifaces"
+	config_get workdir "main" "workdir" "/usr/share/sing-box"
+
+	mkdir -p "$workdir"
+	local group="$(id -ng $user)"
+	chown $user:$group "$workdir"
+
+	procd_open_instance "$NAME.main"
+	# podkop-engine: colors would be escape codes in the system log
+	procd_set_param command "$PROG" run -c "$conffile" -D "$workdir" --disable-color
+
+	# Use root user if you want to use the TUN mode.
+	procd_set_param user "$user"
+	procd_set_param file "$conffile"
+	[ -z "$ifaces" ] || procd_set_param netdev $ifaces
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	# podkop-engine: procd's default threshold of an hour makes six crashes hours apart a
+	# crash loop that stops the service for good; only crashes less than 10 minutes
+	# apart count, as the failsafe counts them
+	procd_set_param respawn 600 5 5
+	# podkop-engine: the default limit of 4096 descriptors runs out at some 2000 proxied
+	# connections, then DNS queries fail for want of a socket; and procd kills a service
+	# 5 s after asking it to stop, while sing-box takes up to 10 s to close its connections
+	procd_set_param limits nofile="65536 65536"
+	procd_set_param term_timeout 15
+	# podkop-engine additions, only when podkop is installed
+	local env="" dns_fallback
+	if [ -x /usr/bin/podkop ]; then
+		# once remote rule-sets that failed at start are downloaded,
+		# re-run podkop list_update (its own lists would still be missing)
+		env="SING_BOX_RULESET_RECOVERED_HOOK=/usr/libexec/podkop-engine/lists-recovered"
+		# when a DNS server reached directly through the WAN fails, answer from the provider's
+		# DNS (sing-box takes it from netifd over ubus; any value turns the fallback on)
+		config_get_bool dns_fallback "main" "dns_fallback" "1"
+		[ "$dns_fallback" -eq 1 ] && env="$env SING_BOX_DNS_FALLBACK=ubus"
+	fi
+	# before a urltest group switches to a member, 64 KiB are downloaded through it: a
+	# server frozen after ~16 KB passes the usual small test, not this one
+	local download_check download_url
+	config_get_bool download_check "main" "urltest_download_check" "1"
+	config_get download_url "main" "urltest_download_url" "https://speed.cloudflare.com/__down?bytes=65536"
+	if [ "$download_check" -eq 1 ] && [ -n "$download_url" ]; then
+		# the variables reach procd as one string cut at spaces: an address with a space
+		# in it would be cut there, and the download would go to what is left of it
+		# (grep looks at lines: a line break becomes a space first, and so a mismatch)
+		if printf '%s' "$download_url" | tr '\n' ' ' | grep -qiE '^https?://[^[:space:]]+$'; then
+			env="$env SING_BOX_URLTEST_DOWNLOAD_URL=$download_url"
+		else
+			logger -t sing-box "urltest_download_url '$download_url' ignored, no download check: use an http:// or https:// address without spaces"
+		fi
+	fi
+	# sing-box keeps the Go memory limit at the memory the system can still give; a size
+	# here (such as 64MiB) replaces it, off removes it. Go stops at start on a malformed
+	# GOMEMLIMIT, so a value it would not take is left out (seven digits at most: a size
+	# past what Go can count is malformed to it); so is a number without a unit, which Go
+	# reads as bytes, and zero: with such a limit the collector never rests
+R12_GUEST_RC=0

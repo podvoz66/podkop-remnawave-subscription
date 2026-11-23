@@ -1,0 +1,8 @@
+udhcpc: started, v1.37.0
+udhcpc: broadcasting discover
+udhcpc: no lease, failing
+Start podkop
+service_triggers start
+[{"tag":"bootstrap-dns-server","type":"udp","server":"10.253.203.1","server_port":53,"detour":null},{"tag":"dns-server","type":"udp","server":"fixture.r12.test","server_port":5353,"detour":null},{"tag":"fakeip-server","type":"fakeip","server":null,"server_port":null,"detour":null}]
+LAB_DNS_FQDN_CONFIGURED
+R12_GUEST_RC=0

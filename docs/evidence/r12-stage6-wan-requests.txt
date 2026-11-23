@@ -1,0 +1,27 @@
+NO_DEFAULT=r12-lan
+NO_DEFAULT=r12-wan
+10.253.203.1 via 10.253.202.1 dev ens2 src 10.253.202.2 uid 0
+    cache
+udp    UNCONN    0         0             10.253.203.1:53           0.0.0.0:*     users:(("python3",pid=1920,fd=5))
+tcp    LISTEN    0         5             10.253.203.1:8443         0.0.0.0:*     users:(("python3",pid=1920,fd=4))
+tcp    LISTEN    0         5             10.253.203.1:53           0.0.0.0:*     users:(("python3",pid=1920,fd=6))
+tcp    LISTEN    0         5             10.253.203.1:8080         0.0.0.0:*     users:(("python3",pid=1920,fd=3))
+STAGE6_CONFIG_PASS
+WAN_REQUEST_EVIDENCE
+{"kind": "http", "peer": "10.253.203.2", "token": "r12s6-1795444288-1482-http", "time": 1795444288.7007139}
+{"kind": "https", "peer": "10.253.203.2", "token": "r12s6-1795444288-1482-https", "time": 1795444288.773372}
+{"kind": "dns-udp", "peer": "10.253.203.2", "token": "r12s6-1795444288-1482-udp.r12.test", "time": 1795444288.971003}
+{"kind": "dns-tcp", "peer": "10.253.203.2", "token": "r12s6-1795444288-1482-tcp.r12.test", "time": 1795444289.0994105}
+{"kind": "http", "peer": "10.253.203.2", "token": "r12s6-1795444350-1771-http", "time": 1795444350.499619}
+{"kind": "https", "peer": "10.253.203.2", "token": "r12s6-1795444350-1771-https", "time": 1795444350.5731115}
+{"kind": "dns-udp", "peer": "10.253.203.2", "token": "r12s6-1795444350-1771-udp.r12.test", "time": 1795444350.7686043}
+{"kind": "dns-tcp", "peer": "10.253.203.2", "token": "r12s6-1795444350-1771-tcp.r12.test", "time": 1795444350.8974552}
+{"kind": "http", "peer": "10.253.203.2", "token": "r12s6-1795444351-1930-http", "time": 1795444351.7625635}
+{"kind": "https", "peer": "10.253.203.2", "token": "r12s6-1795444351-1930-https", "time": 1795444351.7898064}
+{"kind": "dns-udp", "peer": "10.253.203.2", "token": "r12s6-1795444351-1930-udp.r12.test", "time": 1795444351.9898813}
+{"kind": "dns-tcp", "peer": "10.253.203.2", "token": "r12s6-1795444351-1930-tcp.r12.test", "time": 1795444352.1714642}
+RULES_BASELINE_UNCHANGED_PASS
+ROOT_NETNS_LINKS
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000\    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+LAB203_NAT_SOURCE_EXPECTED=10.253.203.2
+R12_GUEST_RC=0

@@ -1,0 +1,2 @@
+{"id": "r12e-t1-detail-1795458140", "result": "FAIL", "reason": "ValueError: DNS vpn.r12.test: rcode=3 qd=1 an=0 id_ok=True question_ok=True"}
+R12_GUEST_RC=1

@@ -1,0 +1,37 @@
+set -eu
+S=/root/r12-stage6
+test ! -e "$S"
+test "$(id -u)" = 0
+test "$(ip -o link show | wc -l)" = 1
+test -z "$(ip -n r12-lan route show default)"
+test -z "$(ip -n r12-wan route show default)"
+test -z "$(ip -n r12-lan route show table main exact 10.253.203.1/32)"
+test -z "$(ip netns exec r12-wan ss -H -ltnup)"
+umask 077
+mkdir "$S"
+cat /proc/sys/kernel/random/boot_id > "$S/boot"
+ip -4 route show > "$S/routes.root.before"
+ip -n r12-lan -4 route show > "$S/routes.lan.before"
+ip -n r12-wan -4 route show > "$S/routes.wan.before"
+ip -j netns list > "$S/namespaces.before"
+ip rule > "$S/rules.root.before"
+for n in r12-lan r12-wan; do
+ stat -Lc %i /run/netns/$n > "$S/$n.inode"
+ ip -n "$n" -j addr > "$S/$n.addr.before"
+ ip -n "$n" -6 route > "$S/$n.ip6.before"
+ ip -n "$n" rule > "$S/$n.rules.before"
+done
+base64 -d > "$S/fixture.py" <<'R12_PY'
+@FIXTURE_BASE64@
+R12_PY
+base64 -d > "$S/control.sh" <<'R12_CTL'
+@CONTROL_BASE64@
+R12_CTL
+chmod 700 "$S/control.sh"
+bash -n "$S/control.sh"
+openssl req -x509 -newkey rsa:2048 -nodes -keyout "$S/server.key" -out "$S/server.crt" -days 2 -subj '/CN=fixture.r12.test' -addext 'subjectAltName=DNS:fixture.r12.test,IP:10.253.203.1' > "$S/cert-generation.log" 2>&1
+cd "$S"
+sha256sum fixture.py control.sh server.crt server.key boot routes.*.before namespaces.before rules.root.before r12-* > assets.sha256
+sha256sum -c assets.sha256 >/dev/null
+: > requests.jsonl
+printf 'STAGE6_BASELINE204_AND_ROLLBACK_READY\n'

@@ -1,0 +1,12 @@
+/tmp/r12-offline/engine.apk: OK
+(1/1) Installing podkop-engine (1.14.4-r28)
+R12_GUEST_ROLLBACK_ASSETS_OK_NOT_HOST_RECOVERY
+sing-box version 1.14.4-pdk-r28
+
+Environment: go1.26.8 linux/amd64
+Tags: with_quic,with_utls,with_clash_api,podkop_slim,badlinkname,tfogo_checklinkname0
+CGO: enabled
+Features: urltest.fallbacks,urltest.download_url,transport.xhttp,tools.decode-link,tls.utls-fallback,dialer.finalmask,tls.certificate_sha256,tls.certificate_server_name
+running
+ENGINE_INSTALLED_NOT_YET_FAILOPEN_TESTED
+R12_GUEST_RC=0

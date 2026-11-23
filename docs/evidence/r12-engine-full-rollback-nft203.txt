@@ -1,0 +1,18 @@
+nft.before
+	}
+
+	chain accept_from_lan {
+		iifname "br-lan" counter accept comment "!fw4: accept lan IPv4/IPv6 traffic"
+	}
+
+	chain accept_to_lan {
+nft.after-full-rollback
+	}
+
+	chain accept_from_lan {
+		iifname "br-lan" counter packets 74 bytes 4734 accept comment "!fw4: accept lan IPv4/IPv6 traffic"
+	}
+
+	chain accept_to_lan {
+/root/r12-engine-baseline/nft.before.normalized /root/r12-engine-baseline/nft.after.normalized differ: char 2102, line 60
+R12_GUEST_RC=1

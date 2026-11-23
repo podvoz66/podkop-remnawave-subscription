@@ -1,0 +1,11 @@
+Mon Nov 23 18:43:50 2026 daemon.err sing-box[9319]: WARN[1062] outbound/urltest[main-out]: switched from outbound vpn-out to fallback direct-out
+Mon Nov 23 18:45:08 2026 daemon.err sing-box[11605]: WARN[0004] dns: no provider DNS fallback for server dns-server: local or private address 10.253.203.1
+Mon Nov 23 18:46:14 2026 daemon.err sing-box[12106]: WARN[0000] dns: no provider DNS fallback for server dns-server: local or private address 10.253.203.1
+Mon Nov 23 18:46:20 2026 daemon.err sing-box[12263]: WARN[0000] dns: no provider DNS fallback for server dns-server: local or private address 10.253.203.1
+Mon Nov 23 18:47:29 2026 daemon.err sing-box[13760]: WARN[0004] dns: no provider DNS fallback for server dns-server: local or private address 10.253.203.1
+Mon Nov 23 18:48:42 2026 daemon.err sing-box[14916]: WARN[0004] dns: no provider DNS: no uplink has DNS servers
+Mon Nov 23 18:48:42 2026 daemon.err sing-box[14916]: WARN[0004] dns: server dns-server falls back to provider DNS when it fails
+Mon Nov 23 18:48:42 2026 daemon.err sing-box[14916]: WARN[0004] dns: no provider DNS fallback for server bootstrap-dns-server: local or private address 10.253.203.1
+LIST_UPDATE_ACTIVE
+198.18.0.2
+R12_GUEST_RC=0

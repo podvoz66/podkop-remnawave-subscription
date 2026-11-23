@@ -1,0 +1,3 @@
+ENGINE_LAB_ISOLATION_AND_SERVICES_PASS
+{"id": "r12e-t1-1795457793", "result": "FAIL", "reason": "ValueError: DNS identity/question/rcode"}
+R12_GUEST_RC=1

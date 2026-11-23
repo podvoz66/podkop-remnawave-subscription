@@ -1,0 +1,77 @@
+#!/bin/bash
+# Root-owned SSH capability: LAB203/204 only, never caller-selected host commands.
+set -Eeuo pipefail
+export LC_ALL=C PATH=/usr/sbin:/usr/bin:/sbin:/bin
+unset BASH_ENV ENV CDPATH
+bad() { echo "STOP: $*" >&2; exit 1; }
+[[ $# == 2 ]] || bad 'usage: inspect|serial|start|stop 203|204'
+action=$1; vm=$2
+[[ $vm == 203 || $vm == 204 ]] || bad 'LAB VMID only'
+[[ $action == inspect || $action == serial || $action == start || $action == stop ]] || bad 'action not allowed'
+[[ $EUID == 0 && $(hostname -s) == podvoz-beelink ]] || bad 'Proxmox root required'
+for c in qm socat timeout flock; do command -v "$c" >/dev/null || bad "missing $c"; done
+# Every operation checks exact lab wiring, including serial (guest commands unrestricted
+# inside the isolated lab, never interpreted by the host shell).
+cfg=$(qm config "$vm") || bad 'cannot read config'
+[[ $(awk -F': ' '$1=="name" {print $2}' <<< "$cfg") == LAB"$vm"-* ]] || bad 'unexpected VM name'
+grep -qx 'onboot: 0' <<< "$cfg" || bad 'onboot must be 0'
+grep -qx 'serial0: socket' <<< "$cfg" || bad 'serial must be socket'
+grep -qx 'boot: order=scsi0' <<< "$cfg" || bad 'unexpected boot'
+grep -Eq "^scsi0: extra-storage:vm-$vm-disk-[0-9]+(,|$)" <<< "$cfg" || bad 'unexpected boot disk'
+if grep -Eq '^(net[0-9]+|hostpci[0-9]+|usb[0-9]+|virtiofs[0-9]+|ivshmem|hookscript|cicustom):' <<< "$cfg"; then bad 'unapproved device/hook'; fi
+while IFS= read -r line; do
+  case "$line" in
+    scsi0:*) :;;
+    ide2:*) [[ $vm == 204 && $line == *cloudinit* ]] || bad 'unexpected extra disk';;
+    scsi[0-9]*:*|sata[0-9]*:*|virtio[0-9]*:*|ide[0-9]*:*) bad 'unexpected extra disk';;
+  esac
+done <<< "$cfg"
+base=/run/r12-lab
+if [[ $vm == 204 ]]; then server=on; reconnect=; else server=off; reconnect=,reconnect-ms=5000; fi
+expected="-netdev stream,id=lablan,server=$server,addr.type=unix,addr.path=$base/lan.sock$reconnect -device virtio-net-pci,netdev=lablan,mac=02:52:12:02:0${vm:2:1}:01 -netdev stream,id=labwan,server=$server,addr.type=unix,addr.path=$base/wan.sock$reconnect -device virtio-net-pci,netdev=labwan,mac=02:52:12:02:0${vm:2:1}:02"
+grep -Fxq "args: $expected" <<< "$cfg" || bad 'Unix stream args differ from approved lab wiring'
+cmd=$(qm showcmd "$vm" --pretty) || bad 'showcmd failed'
+[[ $(grep -Ec -- "^[[:space:]]*-netdev[[:space:]]+'?stream," <<< "$cmd") == 2 ]] || bad 'expected exactly two stream devices'
+[[ $(grep -Ec -- '^[[:space:]]*-netdev[[:space:]]' <<< "$cmd") == 2 ]] || bad 'unexpected network backend'
+if grep -Eq 'vmbr[0-9]|tap[0-9]|hostfwd|vfio|host-tunnel' <<< "$cmd"; then bad 'host network/passthrough detected'; fi
+# Existing root-private directory, never repair/mkdir network paths automatically.
+[[ -d $base && ! -L $base && $(stat -c '%u:%a' "$base") == 0:700 ]] || bad 'socket directory ownership/mode'
+run=/run/codexops-r12-lab
+[[ ! -L $run ]] || bad 'runtime symlink'
+if [[ ! -e $run ]]; then install -d -o root -g root -m 0700 "$run"; fi
+[[ -d $run && $(stat -c '%u:%a' "$run") == 0:700 ]] || bad 'runtime permissions'
+exec 9>"$run/$vm.lock"
+flock -n 9 || bad 'LAB operation already active'
+case "$action" in
+inspect)
+  qm status "$vm"
+  # Never dump cipassword, SSH keys, cloud-init user-data or arbitrary config fields.
+  awk '/^(name|onboot|memory|cores|boot|scsihw|scsi0|ide2|serial0|vga|args|ciuser):/ {print}
+       /^cipassword:/ {print "cipassword: PRESENT_REDACTED"}
+       /^sshkeys:/ {print "sshkeys: PRESENT_REDACTED"}' <<< "$cfg"
+  echo 'LAB_ISOLATION_CONFIG_PASS (runtime traffic not tested)'
+  ;;
+serial)
+  [[ $(qm status "$vm") == 'status: running' ]] || bad 'LAB must be running'
+  sock=/run/qemu-server/$vm.serial0
+  [[ -S $sock && ! -L $sock && $(stat -c %u "$sock") == 0 ]] || bad 'untrusted serial socket'
+  # Refuse an already attached console. ss output is inspected only, not returned.
+  command -v ss >/dev/null || bad 'ss unavailable'
+  [[ $(ss -xapH | grep -E "(/var)?/run/qemu-server/$vm\.serial0([[:space:]]|$)" | grep -c ESTAB || true) == 0 ]] || bad 'serial busy; detach existing owner terminal'
+  exec timeout --signal=TERM --kill-after=3 120 socat STDIO "UNIX-CONNECT:$sock"
+  ;;
+start)
+  [[ $(qm status "$vm") == 'status: stopped' ]] || bad 'LAB not stopped'
+  # No restart loops, guest/config modifications, or forced cleanup of stale sockets.
+  if [[ $vm == 204 ]]; then
+    [[ ! -e $base/lan.sock && ! -e $base/wan.sock ]] || bad 'socket paths exist; diagnose stale sockets first'
+  else
+    [[ -S $base/lan.sock && -S $base/wan.sock ]] || bad 'LAB204 sockets required'
+  fi
+  exec timeout --signal=TERM --kill-after=3 45 qm start "$vm"
+  ;;
+stop)
+  [[ $(qm status "$vm") == 'status: running' ]] || bad 'LAB not running'
+  exec timeout --signal=TERM --kill-after=3 45 qm stop "$vm"
+  ;;
+esac

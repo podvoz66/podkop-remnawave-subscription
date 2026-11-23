@@ -1,0 +1,19 @@
+/tmp/r12-offline/engine.apk: OK
+/tmp/r12-offline/podkop.apk: OK
+/tmp/r12-offline/base.adb: OK
+/tmp/r12-offline/packages.adb: OK
+/tmp/r12-offline/target.adb: OK
+/tmp/r12-offline/kmods.adb: OK
+R12_GUEST_ROLLBACK_ASSETS_OK_NOT_HOST_RECOVERY
+[22455.520591] kmodloader: loading kernel modules from /etc/modules.d/*
+[22455.523573] kmodloader: done loading kernel modules from /etc/modules.d/*
+[22455.535007] kmodloader: loading kernel modules from /etc/modules.d/*
+[22455.539061] kmodloader: done loading kernel modules from /etc/modules.d/*
+sing-box version 1.14.4-pdk-r28
+
+Environment: go1.26.8 linux/amd64
+Tags: with_quic,with_utls,with_clash_api,podkop_slim,badlinkname,tfogo_checklinkname0
+CGO: enabled
+Features: urltest.fallbacks,urltest.download_url,transport.xhttp,tools.decode-link,tls.utls-fallback,dialer.finalmask,tls.certificate_sha256,tls.certificate_server_name
+PACKAGES_INSTALLED_RUNTIME_NOT_YET_ACCEPTED
+R12_GUEST_RC=0

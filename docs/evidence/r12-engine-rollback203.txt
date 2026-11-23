@@ -1,0 +1,12 @@
+(1/1) Purging podkop-engine (1.14.4-r28)
+  0%                                               Executing podkop-engine-1.14.4-r28.pre-deinstall
+  0%                                               * Command failed: ubus call service delete { "name": "podkop-engine" } (Not found)
+  0%                                               * Command failed: ubus call service delete { "name": "sing-box" } (Not found)
+  0%                                              90% #######################################     100% ############################################[syncing disks...]OK: 19.3 MiB in 182 packages
+udhcpc: started, v1.37.0
+udhcpc: broadcasting discover
+udhcpc: no lease, failing
+R12_PACKAGE_CONFIG_ROLLBACK_PASS_TRANSIT_STILL_REQUIRES_PROBE
+R12 engine-package-rollback
+ENGINE_PACKAGE_ROLLBACK_AND_DIRECT_HTTP_PASS
+R12_GUEST_RC=0

@@ -1,0 +1,8 @@
+udhcpc: started, v1.37.0
+udhcpc: broadcasting discover
+udhcpc: no lease, failing
+Start podkop
+service_triggers start
+		elements = { 10.253.203.1 }
+LAB_SUBNET_TYPE_CORRECTED_TO_DOCUMENTED_DYNAMIC
+R12_GUEST_RC=0

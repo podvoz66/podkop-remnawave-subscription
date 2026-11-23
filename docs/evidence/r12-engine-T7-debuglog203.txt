@@ -1,0 +1,3 @@
+/tmp/r12-command-0c99ad44aeece7b0.sh: /lib/functions.sh: line 539: IPKG_INSTROOT: parameter not set
+SING_BOX_HANG_STARTED=1795459953
+R12_GUEST_RC=0

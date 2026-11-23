@@ -1,0 +1,1 @@
+{"path":"/tmp/r12-bulk-486852235fb57fec89cc1a50e4427a5cda15b04e06cef530adf859ec1cc26e19","bytes":40960,"sha256":"486852235fb57fec89cc1a50e4427a5cda15b04e06cef530adf859ec1cc26e19","verified":true}

@@ -1,0 +1,8 @@
+Downloading libatomic1-14.3.0-r5
+  0%                                              10% ####                                        100% ############################################7ba4a3b3292079f752acd49ab0eb2b5c44ab535e9565a01cee75a87f3ef95c6f  /tmp/r12-offline/libatomic1-14.3.0-r5.apk
+7ba4a3b3292079f752acd49ab0eb2b5c44ab535e9565a01cee75a87f3ef95c6f  /tmp/r12-offline/verified/libatomic1-14.3.0-r5.apk
+Downloading libatomic1-14.3.0-r5
+ERROR: libatomic1-14.3.0-r5: ADB integrity error
+NEGATIVE_TRUST_RC=1
+SIGNED_INDEX_REJECTS_VALID_WRONG_PACKAGE
+R12_GUEST_RC=0

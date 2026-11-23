@@ -1,0 +1,9 @@
+udhcpc: started, v1.37.0
+udhcpc: broadcasting discover
+udhcpc: no lease, failing
+Start podkop
+service_triggers start
+Mon Nov 23 18:59:12 2026 user.notice podkop: [fatal] URLTest proxy links is not set. Aborted.
+lrwxrwxrwx    1 root     root            23 Nov 23 18:13 /etc/rc.d/S95podkop-engine -> ../init.d/podkop-engine
+lrwxrwxrwx    1 root     root            16 Nov 23 18:13 /etc/rc.d/S99podkop -> ../init.d/podkop
+R12_GUEST_RC=0

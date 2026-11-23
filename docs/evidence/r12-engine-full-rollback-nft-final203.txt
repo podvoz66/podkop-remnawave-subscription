@@ -1,0 +1,18 @@
+nft.before
+	}
+
+	chain accept_from_lan {
+		iifname "br-lan" counter accept comment "!fw4: accept lan IPv4/IPv6 traffic"
+	}
+
+	chain accept_to_lan {
+nft.after-full-rollback
+	}
+
+	chain accept_from_lan {
+		iifname "br-lan" counter packets 74 bytes 4734 accept comment "!fw4: accept lan IPv4/IPv6 traffic"
+	}
+
+	chain accept_to_lan {
+NFT_SEMANTIC_BASELINE_PASS_ONLY_TRAFFIC_COUNTERS_DIFFER
+R12_GUEST_RC=0

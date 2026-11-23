@@ -1,0 +1,55 @@
+R12_GUEST_ROLLBACK_ASSETS_OK_NOT_HOST_RECOVERY
+/sbin/uci: Entry not found
+udhcpc: started, v1.37.0
+udhcpc: broadcasting discover
+udhcpc: no lease, failing
+Command failed: Not found
+( 1/17) Purging flock (2.41.5-r1)
+  0%                                               Executing flock-2.41.5-r1.pre-deinstall
+  0%                                               * add alternative: /usr/bin/flock -> /bin/busybox
+  0%                                             ( 2/17) Purging podkop (0.7.24-r1)
+  0%                                               3% #                                             Executing podkop-0.7.24-r1.pre-deinstall
+  3% #                                             * Command failed: ubus call service delete { "name": "sing-box" } (Not found)
+  3% #                                             * Command failed: ubus call service delete { "name": "podkop" } (Not found)
+  3% #                                             * Command failed: ubus call service delete { "name": "sing-box" } (Not found)
+  3% #                                             * Command failed: ubus call service delete { "name": "podkop" } (Not found)
+  3% #                                           ( 3/17) Purging bind-dig (9.20.31-r1)
+  3% #                                             6% ##                                            Executing bind-dig-9.20.31-r1.pre-deinstall
+  6% ##                                            6% ###                                         ( 4/17) Purging bind-libs (9.20.31-r1)
+  6% ###                                          10% ####                                          Executing bind-libs-9.20.31-r1.pre-deinstall
+ 10% ####                                         14% ######                                      ( 5/17) Purging libatomic1 (14.3.0-r5)
+ 14% ######                                       17% #######                                       Executing libatomic1-14.3.0-r5.pre-deinstall
+ 17% #######                                     ( 6/17) Purging libopenssl3 (3.5.9-r1)
+ 17% #######                                      20% #########                                     Executing libopenssl3-3.5.9-r1.pre-deinstall
+ 20% #########                                    28% ############                                ( 7/17) Purging liburcu (0.15.5-r1)
+ 28% ############                                 31% #############                                 Executing liburcu-0.15.5-r1.pre-deinstall
+ 31% #############                                31% ##############                              ( 8/17) Purging libuv1 (1.48.0-r1)
+ 31% ##############                               35% ###############                               Executing libuv1-1.48.0-r1.pre-deinstall
+ 35% ###############                             ( 9/17) Purging coreutils-base64 (9.9-r2)
+ 35% ###############                              38% #################                             Executing coreutils-base64-9.9-r2.pre-deinstall
+ 38% #################                             * add alternative: /bin/base64 -> /bin/busybox
+ 38% #################                           (10/17) Purging coreutils (9.9-r2)
+ 38% #################                            42% ##################                            Executing coreutils-9.9-r2.pre-deinstall
+ 42% ##################                          (11/17) Purging curl (8.23.0-r1)
+ 42% ##################                           45% ###################                           Executing curl-8.23.0-r1.pre-deinstall
+ 45% ###################                          45% ####################                        (12/17) Purging libcurl4 (8.23.0-r1)
+ 45% ####################                         48% #####################                         Executing libcurl4-8.23.0-r1.pre-deinstall
+ 48% #####################                        49% #####################                       (13/17) Purging libnghttp2-14 (1.70.0-r1)
+ 49% #####################                        52% #######################                       Executing libnghttp2-14-1.70.0-r1.pre-deinstall
+ 52% #######################                      53% #######################                     (14/17) Purging jq (1.8.1-r2)
+ 53% #######################                      56% ########################                      Executing jq-1.8.1-r2.pre-deinstall
+ 56% ########################                    (15/17) Purging kmod-nft-tproxy (6.12.87-r1)
+ 56% ########################                     60% ##########################                    Executing kmod-nft-tproxy-6.12.87-r1.pre-deinstall
+ 60% ##########################                  (16/17) Purging kmod-nf-tproxy (6.12.87-r1)
+ 60% ##########################                   63% ###########################                   Executing kmod-nf-tproxy-6.12.87-r1.pre-deinstall
+ 63% ###########################                 (17/17) Purging podkop-engine (1.14.4-r28)
+ 63% ###########################                  66% #############################                 Executing podkop-engine-1.14.4-r28.pre-deinstall
+ 66% #############################                 * Command failed: ubus call service delete { "name": "podkop-engine" } (Not found)
+ 66% #############################                 * Command failed: ubus call service delete { "name": "sing-box" } (Not found)
+ 66% #############################                96% ##########################################  100% ############################################[syncing disks...]OK: 19.3 MiB in 182 packages
+udhcpc: started, v1.37.0
+udhcpc: broadcasting discover
+udhcpc: no lease, failing
+R12_PACKAGE_CONFIG_ROLLBACK_PASS_TRANSIT_STILL_REQUIRES_PROBE
+/root/r12-engine-baseline/nft.before /root/r12-engine-baseline/nft.after-full-rollback differ: char 2102, line 60
+R12_GUEST_RC=1

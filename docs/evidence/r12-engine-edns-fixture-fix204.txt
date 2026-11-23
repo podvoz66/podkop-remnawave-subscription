@@ -1,0 +1,28 @@
+ENGINE_LAB204_ROLLBACK_PASS
+FIXTURE_STOPPED
+/root/r12-stage6/fixture.py.new: OK
+/root/r12-engine-offline/r12-dns-fixture.py.new: OK
+FIXTURE_STARTED
+10.253.203.1 via 10.253.202.1 dev ens2 src 10.253.202.2 uid 0
+    cache
+udp    UNCONN    0         0             10.253.203.1:53           0.0.0.0:*     users:(("python3",pid=3008,fd=5))
+tcp    LISTEN    0         5             10.253.203.1:8443         0.0.0.0:*     users:(("python3",pid=3008,fd=4))
+tcp    LISTEN    0         5             10.253.203.1:53           0.0.0.0:*     users:(("python3",pid=3008,fd=6))
+tcp    LISTEN    0         5             10.253.203.1:8080         0.0.0.0:*     users:(("python3",pid=3008,fd=3))
+STAGE6_CONFIG_PASS
+HTTP=200
+R12 r12s6-1795458035-3018-http
+HTTPS=200 TLS_VERIFY=0
+R12 r12s6-1795458035-3018-https
+TLS_WRONG_NAME_REJECTED
+DNS_UDP_PASS r12s6-1795458035-3018-udp.r12.test A=10.253.203.1
+DNS_TCP_PASS r12s6-1795458035-3018-tcp.r12.test A=10.253.203.1
+{"kind": "http", "peer": "10.253.203.2", "token": "r12s6-1795458035-3018-http", "time": 1795458035.0732133}
+{"kind": "https", "peer": "10.253.203.2", "token": "r12s6-1795458035-3018-https", "time": 1795458035.0985968}
+{"kind": "dns-udp", "peer": "10.253.203.2", "token": "r12s6-1795458035-3018-udp.r12.test", "time": 1795458035.30037}
+{"kind": "dns-tcp", "peer": "10.253.203.2", "token": "r12s6-1795458035-3018-tcp.r12.test", "time": 1795458035.4944236}
+EXTERNAL_IPV4_ROUTES_ABSENT
+STAGE6_TRANSIT_PASS
+ENGINE_LAB_SERVICES_READY
+ENGINE_LAB_ISOLATION_AND_SERVICES_PASS
+R12_GUEST_RC=0

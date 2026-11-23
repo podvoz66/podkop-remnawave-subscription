@@ -1,0 +1,9 @@
+/tmp/r12-bulk-5284c5b52192f5945af9a6c962accd5d29c684f37da1e38c2640ea03958738a2: OK
+/tmp/r12-bulk-ceee4a573acce7018f5d3a59694647e7703742784a00651d6e88b54e256d6d17: OK
+ENGINE_SERVICES_BASELINE_READY
+grep: /root/r12-engine-baseline204/offline.log: No such file or directory
+grep: /root/r12-engine-baseline204/vless.log: No such file or directory
+grep: /root/r12-engine-baseline204/dns.log: No such file or directory
+ENGINE_LAB_SERVICES_READY
+ENGINE_LAB_ISOLATION_AND_SERVICES_PASS
+R12_GUEST_RC=0

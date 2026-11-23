@@ -1,0 +1,5 @@
+/root/r12-engine-offline/r12-vless-fixture.py.new: OK
+/root/r12-engine-offline/r12-engine-probe204.py.new: OK
+/root/r12-engine-offline/r12-engine-services204.sh.new: OK
+ENGINE_LAB_ISOLATION_AND_SERVICES_PASS
+R12_GUEST_RC=0
