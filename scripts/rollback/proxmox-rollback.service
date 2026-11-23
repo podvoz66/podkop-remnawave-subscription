@@ -1,0 +1,10 @@
+[Unit]
+Description=Independent local VM202 rollback deadline checker
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/proxmox-rollback-watch
+User=root
+UMask=0077
+TimeoutStartSec=180

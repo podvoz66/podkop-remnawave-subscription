@@ -1,0 +1,15 @@
+# TEMPLATE ONLY. No credentials shipped. Replace paths after Stage-1 approval.
+Host openwrt-rollback-202
+    HostName 192.168.0.1
+    Port 66
+    User root
+    IdentityFile /etc/podkop-emergency-202/existing-approved-key
+    IdentitiesOnly yes
+    UserKnownHostsFile /etc/podkop-emergency-202/known_hosts
+    StrictHostKeyChecking yes
+    UpdateHostKeys no
+    ProxyCommand none
+    ProxyJump none
+    ForwardAgent no
+    ForwardX11 no
+    ClearAllForwardings yes

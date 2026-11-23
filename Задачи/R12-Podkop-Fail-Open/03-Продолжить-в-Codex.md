@@ -1,5 +1,10 @@
 # Продолжить R12
 
+**PRODUCTION NO-GO.** До отдельного разрешения никаких установок/перезапусков/изменений VM202 или PVE.
+Новый приоритет: [независимый rollback, Stage1/Stage2](../../docs/independent-rollback.ru.md).
+Предыдущий rollback через новый guard недостаточен. Нужен изолированный OpenWrt-стенд,
+проверенный LAN SSH PVE→VM и решение сценария SSH+guest scheduler unavailable.
+
 1. Читать [план](01-Задача-и-план.md), [результаты](02-Ход-работы.md),
    [ограничения и rollback](../../docs/fail-open.ru.md), актуальный diff ветки.
 2. Не повторять поиск доступа/MCP: SSH alias openwrt-202 уже работает из Codespace,
