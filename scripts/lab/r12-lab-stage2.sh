@@ -34,14 +34,20 @@ verify() {
     if [[ $id == 203 ]]; then expected=$args203; macs='02:52:12:02:03:'; else expected=$args204; macs='02:52:12:02:04:'; fi
     grep -Fxq "args: $expected" <<< "$cfg" || bad "VM$id custom args not exactly pinned"
     cmd=$(qm showcmd "$id" --pretty) || bad "qm showcmd VM$id failed"
-    num=$(grep -Foc -- '-netdev stream' <<< "$cmd" || true)
-    [[ $num == 2 ]] || bad "VM$id expected exactly two stream backends, got $num"
-    num=$(grep -Foc -- '-device virtio-net-pci' <<< "$cmd" || true)
-    [[ $num == 2 ]] || bad "VM$id expected two virtio devices, got $num"
+    # Proxmox qm showcmd --pretty shell-quotes arguments:
+    #   -netdev 'stream,id=...' and -device 'virtio-net-pci,netdev=...'.
+    num=$(grep -Ec -- "^[[:space:]]*-netdev[[:space:]]+'?stream," <<< "$cmd" || true)
+    [[ $num == 2 ]] || bad "VM$id expected exactly two Unix stream backends, got $num"
+    num=$(grep -Ec -- "^[[:space:]]*-netdev[[:space:]]" <<< "$cmd" || true)
+    [[ $num == 2 ]] || bad "VM$id unexpected extra netdev"
+    num=$(grep -Ec -- "^[[:space:]]*-device[[:space:]]+'?virtio-net-pci," <<< "$cmd" || true)
+    [[ $num == 2 ]] || bad "VM$id expected two virtio-net devices, got $num"
     grep -Fq -- "addr.path=$LAN" <<< "$cmd" || bad "VM$id no lab LAN path"
     grep -Fq -- "addr.path=$WAN" <<< "$cmd" || bad "VM$id no lab WAN path"
-    grep -Fq -- "mac=$macs" <<< "$cmd" || bad "VM$id MACs absent"
-    if grep -Eq -- 'vmbr0|vmbr1|tap[0-9]|-netdev[[:space:]]+(user|tap|bridge|passt)|-nic[[:space:]]+(user|tap)|hostfwd|vfio|host-tunnel' <<< "$cmd"; then
+    for n in 01 02; do
+      grep -Fq -- "mac=${macs}${n}" <<< "$cmd" || bad "VM$id missing lab MAC ${macs}${n}"
+    done
+    if grep -Eq -- "vmbr0|vmbr1|tap[0-9]|-netdev[[:space:]]+'?(user|tap|bridge|passt)|-nic[[:space:]]+'?(user|tap)|hostfwd|vfio|host-tunnel" <<< "$cmd"; then
       bad "VM$id appears to have a host or production network"
     fi
     printf 'VM%d_STREAM_ARGS_OK (stopped, no PVE NIC)\n' "$id"
