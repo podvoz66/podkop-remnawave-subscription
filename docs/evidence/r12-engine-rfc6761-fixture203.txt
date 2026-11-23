@@ -1,0 +1,7 @@
+dnsmasq: syntax check OK.
+udhcpc: started, v1.37.0
+udhcpc: broadcasting discover
+udhcpc: no lease, failing
+;; communications error to 10.253.202.1#53: connection refused
+;; no servers could be reached
+R12_GUEST_RC=9

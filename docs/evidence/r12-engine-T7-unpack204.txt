@@ -1,0 +1,3 @@
+/tmp/r12-bulk-486852235fb57fec89cc1a50e4427a5cda15b04e06cef530adf859ec1cc26e19: OK
+2beb095dd74e47e6545af914d4a19d3f575fa1dd597882aa31624055050d82f3  /root/r12-engine-offline/flock-2.41.5-r1.apk
+R12_GUEST_RC=0

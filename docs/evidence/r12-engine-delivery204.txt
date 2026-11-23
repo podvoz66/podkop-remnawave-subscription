@@ -1,0 +1,3 @@
+/tmp/r12-bulk-c72c91a0567a6243c55bef20b4990a521461f9740c5219d2a35b51f6cc2cbb2a: OK
+c72c91a0567a6243c55bef20b4990a521461f9740c5219d2a35b51f6cc2cbb2a  /tmp/r12-offline/engine.apk
+R12_GUEST_RC=0

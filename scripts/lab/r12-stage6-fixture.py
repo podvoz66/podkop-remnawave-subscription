@@ -4,7 +4,7 @@ import argparse, http.server, ipaddress, json, os, re, socket, socketserver, ssl
 
 def dns_reply(data):
     if len(data)<12: raise ValueError('short header')
-    ident,flags,qd,_,_,_=struct.unpack('!6H',data[:12])
+    ident,flags,qd,an,ns,ar=struct.unpack('!6H',data[:12])
     if qd!=1 or flags & 0x8000: raise ValueError('not one question')
     pos=12; labels=[]
     while True:
@@ -13,11 +13,18 @@ def dns_reply(data):
         if not size: break
         if size>63 or pos+size>len(data): raise ValueError('bad label')
         labels.append(data[pos:pos+size].decode('ascii')); pos+=size
-    if pos+4!=len(data): raise ValueError('bad question')
+    end=pos+4
+    if end>len(data) or an or ns or ar>1: raise ValueError('bad question')
+    if ar:
+        # Accept one EDNS0 OPT, strip it from this synthetic response. No upstream.
+        if end+11>len(data) or data[end:end+3]!=b'\0\0\x29': raise ValueError('bad OPT')
+        size=struct.unpack('!H',data[end+9:end+11])[0]
+        if end+11+size!=len(data): raise ValueError('bad OPT length')
+    elif end!=len(data): raise ValueError('trailing data')
     typ,cls=struct.unpack('!HH',data[pos:pos+4]); name='.'.join(labels)
-    if typ!=1 or cls!=1 or not re.fullmatch(r'[a-z0-9-]+\.r12\.test',name): raise ValueError('nonfixture question')
+    if typ not in (1,28) or cls!=1 or not re.fullmatch(r'[a-z0-9-]+\.r12\.test',name): raise ValueError('nonfixture question')
     answer=b'\xc0\x0c'+struct.pack('!HHIH',1,1,0,4)+ipaddress.ip_address('10.253.203.1').packed
-    return struct.pack('!6H',ident,0x8180,1,1,0,0)+data[12:]+answer,name
+    return struct.pack('!6H',ident,0x8180,1,int(typ==1),0,0)+data[12:end]+(answer if typ==1 else b''),name
 
 def recv_exact(s,n):
     result=b''

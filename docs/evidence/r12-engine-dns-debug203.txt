@@ -1,0 +1,11 @@
+DNS_SERVER=127.0.0.42
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 26680
+;; flags: qr aa rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 0
+
+;; ANSWER SECTION:
+vpn.r12.test.		60	IN	A	198.18.0.3
+
+;; communications error to 127.0.0.42#53: timed out
+;; no servers could be reached
+R12_GUEST_RC=9

@@ -1,0 +1,4 @@
+CASE=valid
+Dry-run rejected: sing-box config invalid
+SING_BOX_HANG_STARTED=1795459953
+R12_GUEST_RC=0

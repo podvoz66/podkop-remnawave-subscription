@@ -1,0 +1,22 @@
+ENGINE_LAB204_ROLLBACK_PASS
+10.253.203.1 via 10.253.202.1 dev ens2 src 10.253.202.2 uid 0
+    cache
+udp    UNCONN    0         0             10.253.203.1:53           0.0.0.0:*     users:(("python3",pid=3008,fd=5))
+tcp    LISTEN    0         5             10.253.203.1:8443         0.0.0.0:*     users:(("python3",pid=3008,fd=4))
+tcp    LISTEN    0         5             10.253.203.1:53           0.0.0.0:*     users:(("python3",pid=3008,fd=6))
+tcp    LISTEN    0         5             10.253.203.1:8080         0.0.0.0:*     users:(("python3",pid=3008,fd=3))
+STAGE6_CONFIG_PASS
+HTTP=200
+R12 r12s6-1795460477-4769-http
+HTTPS=200 TLS_VERIFY=0
+R12 r12s6-1795460477-4769-https
+TLS_WRONG_NAME_REJECTED
+DNS_UDP_PASS r12s6-1795460477-4769-udp.r12.test A=10.253.203.1
+DNS_TCP_PASS r12s6-1795460477-4769-tcp.r12.test A=10.253.203.1
+{"kind": "http", "peer": "10.253.203.2", "token": "r12s6-1795460477-4769-http", "time": 1795460477.5203936}
+{"kind": "https", "peer": "10.253.203.2", "token": "r12s6-1795460477-4769-https", "time": 1795460477.5912428}
+{"kind": "dns-udp", "peer": "10.253.203.2", "token": "r12s6-1795460477-4769-udp.r12.test", "time": 1795460477.7970996}
+{"kind": "dns-tcp", "peer": "10.253.203.2", "token": "r12s6-1795460477-4769-tcp.r12.test", "time": 1795460477.9926224}
+EXTERNAL_IPV4_ROUTES_ABSENT
+STAGE6_TRANSIT_PASS
+R12_GUEST_RC=0

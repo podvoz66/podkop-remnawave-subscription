@@ -1,0 +1,33 @@
+[ "10.253.203.1" ]
+[
+  {
+    "tag": "bootstrap-dns-server",
+    "type": "udp",
+    "server": "10.253.203.1",
+    "server_port": 53,
+    "detour": null
+  },
+  {
+    "tag": "dns-server",
+    "type": "udp",
+    "server": "10.253.203.1",
+    "server_port": 5353,
+    "detour": null
+  },
+  {
+    "tag": "fakeip-server",
+    "type": "fakeip",
+    "server": null,
+    "server_port": null,
+    "detour": null
+  }
+]
+Mon Nov 23 18:26:12 2026 daemon.err sing-box[9319]: WARN[0004] dns: no provider DNS fallback for server dns-server: local or private address 10.253.203.1
+Mon Nov 23 18:43:50 2026 daemon.err sing-box[9319]: WARN[1062] outbound/urltest[main-out]: switched from outbound vpn-out to fallback direct-out
+Mon Nov 23 18:45:08 2026 daemon.err sing-box[11605]: WARN[0004] dns: no provider DNS fallback for server dns-server: local or private address 10.253.203.1
+Mon Nov 23 18:46:14 2026 daemon.err sing-box[12106]: WARN[0000] dns: no provider DNS fallback for server dns-server: local or private address 10.253.203.1
+Mon Nov 23 18:46:20 2026 daemon.err sing-box[12263]: WARN[0000] dns: no provider DNS fallback for server dns-server: local or private address 10.253.203.1
+Mon Nov 23 18:46:39 2026 daemon.err failsafe[5938]: udhcpc: started, v1.37.0
+Mon Nov 23 18:46:39 2026 daemon.err failsafe[5938]: udhcpc: broadcasting discover
+Mon Nov 23 18:46:42 2026 daemon.err failsafe[5938]: udhcpc: no lease, failing
+R12_GUEST_RC=0

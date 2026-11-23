@@ -1,0 +1,61 @@
+/tmp/r12-offline/base.adb
+/tmp/r12-offline/packages.adb
+/tmp/r12-offline/target.adb
+/tmp/r12-offline/kmods.adb
+-rw-------    1 root     root        110893 Nov 23 17:35 /tmp/r12-offline/base.adb
+-rw-------    1 root     root        160237 Nov 23 17:35 /tmp/r12-offline/kmods.adb
+-rw-------    1 root     root        748678 Nov 23 17:35 /tmp/r12-offline/packages.adb
+-rw-------    1 root     root         14967 Nov 23 17:35 /tmp/r12-offline/target.adb
+[
+  {
+    "name": "libatomic1",
+    "version": "14.3.0-r5"
+  }
+]
+                        location
+  --verbose, -v         Print more information (can be specified twice)
+  --version, -V         Print program version and exit
+  --wait TIME           Wait for TIME seconds to get an exclusive repository
+                        lock before failing
+
+Query options:
+  --all-matches         Select all matched packages
+  --available           Filter selection to available packages
+  --fields FIELDS[:REVERSE_FIELD]
+                        A comma separated list of fields to include in the
+                        output
+  --format FORMATSPEC   Specify output format from default, yaml or json
+  --from FROMSPEC       Search packages from: system (all system sources),
+                        repositories (exclude installed database), installed
+                        (exclude normal repositories) or none (commandline
+                        repositories only)
+  --installed           Filter selection to installed packages
+  --match FIELDS        A comma separated list of fields to match the query
+                        against
+  --recursive           Run solver algorithm with given CONSTRAINTS to
+                        select packages
+  --summarize FIELD[:REVERSE_FIELD]
+                        Produce a summary of the specified field from all
+                        matches
+  --upgradable          Filter selection to upgradable packages
+  --world               Include apk-world(5) dependencies in constraints
+  --orphaned            Filter selection to orphaned packages
+
+Fetch options:
+  --built-after TIMESPEC
+                        Only fetch packages that have buildtime more recent
+                        than TIMESPEC
+  --link, -l            Create hard links if possible
+  --pkgname-spec PKGNAME_SPEC
+                        Generate downloaded package names with PKGNAME_SPEC
+                        specification
+  --output, -o DIR      Write the downloaded file(s) to DIR
+  --simulate[=BOOL]     Simulate the requested operation without making any
+                        changes
+  --stdout, -s          Dump the .apk file(s) to stdout
+  --url                 Print the full URL for downloaded packages
+
+For more information:
+  https://openwrt.org/docs/guide-user/additional-software/apk
+BASELINE_UNCHANGED_AFTER_REJECTED_INSTALL
+R12_GUEST_RC=0

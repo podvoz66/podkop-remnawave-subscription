@@ -1,0 +1,15 @@
+/usr/share/dnsmasq/rfc6761.conf:11:server=/test/
+/var/etc/dnsmasq.conf.cfg01411c:2:conf-file=/etc/dnsmasq.conf
+/var/etc/dnsmasq.conf.cfg01411c:19:stop-dns-rebind
+/var/etc/dnsmasq.conf.cfg01411c:20:rebind-localhost-ok
+/var/etc/dnsmasq.conf.cfg01411c:28:conf-file=/usr/share/dnsmasq/dhcpbogushostname.conf
+/var/etc/dnsmasq.conf.cfg01411c:32:conf-file=/usr/share/dnsmasq/rfc6761.conf
+18-TIMEVALIDFILE="/var/state/dnsmasqsec"
+19-BASEDHCPSTAMPFILE="/var/run/dnsmasq"
+20-DHCPBOGUSHOSTNAMEFILE="/usr/share/dnsmasq/dhcpbogushostname.conf"
+21:RFC6761FILE="/usr/share/dnsmasq/rfc6761.conf"
+22-DHCPSCRIPT="/usr/lib/dnsmasq/dhcp-script.sh"
+23-DHCPSCRIPT_DEPENDS="/usr/share/libubox/jshn.sh /usr/bin/jshn /bin/ubus /usr/bin/env"
+24-
+25-DNSMASQ_DHCP_VER=4
+R12_GUEST_RC=0

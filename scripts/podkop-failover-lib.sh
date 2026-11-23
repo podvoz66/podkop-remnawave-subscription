@@ -64,6 +64,10 @@ validate_sections() {
 }
 make_probe_config() (
     # Only pure facade/manager functions, never source /usr/bin/podkop.
+    # OpenWrt /lib/functions.sh and Podkop's facade legitimately read unset
+    # optional variables (e.g. IPKG_INSTROOT). Confine their shell semantics
+    # to this subshell; keep the updater's nounset protection in its caller.
+    set +u
     mp_dir=$1 mp_out=$2
     . "${PODKOP_FUNCTIONS:-/lib/functions.sh}"
     . "${PODKOP_CONSTANTS:-/usr/lib/podkop/constants.sh}"

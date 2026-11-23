@@ -1,0 +1,12 @@
+Mon Nov 23 18:46:09 2026 user.notice podkop-engine: sing-box exited unexpectedly, procd restarts it; MemTotal 986 MB, MemAvailable 869 MB; /tmp 25 of 493 MB; /tmp/sing-box/cache.db 0.0 MB; largest: curl 2 MB, rpcd 1 MB, podkop 1 MB
+Mon Nov 23 18:46:15 2026 user.notice podkop-engine: sing-box exited unexpectedly, procd restarts it; MemTotal 986 MB, MemAvailable 867 MB; /tmp 25 of 493 MB; /tmp/sing-box/cache.db 0.0 MB; largest: curl 2 MB, rpcd 1 MB, podkop 1 MB
+Mon Nov 23 18:46:21 2026 user.notice podkop-engine: sing-box exited unexpectedly, procd restarts it; MemTotal 986 MB, MemAvailable 867 MB; /tmp 25 of 493 MB; /tmp/sing-box/cache.db 0.0 MB; largest: curl 2 MB, rpcd 1 MB, podkop 1 MB
+Mon Nov 23 18:46:27 2026 user.notice podkop-engine: sing-box exited unexpectedly, procd restarts it; MemTotal 986 MB, MemAvailable 867 MB; /tmp 25 of 493 MB; /tmp/sing-box/cache.db 0.0 MB; largest: rpcd 1 MB, podkop 1 MB, netifd 1 MB
+Mon Nov 23 18:46:33 2026 user.notice podkop-engine: sing-box exited unexpectedly, procd restarts it; MemTotal 986 MB, MemAvailable 867 MB; /tmp 25 of 493 MB; /tmp/sing-box/cache.db 0.0 MB; largest: rpcd 1 MB, netifd 1 MB, uhttpd 1 MB
+Mon Nov 23 18:46:39 2026 daemon.info procd: Instance sing-box::sing-box.main s in a crash loop 6 crashes, 1 seconds since last crash
+Mon Nov 23 18:46:39 2026 user.notice podkop-engine: sing-box went down for good; MemTotal 986 MB, MemAvailable 867 MB; /tmp 25 of 493 MB; /tmp/sing-box/cache.db 0.0 MB; largest: rpcd 1 MB, netifd 1 MB, uhttpd 1 MB
+Mon Nov 23 18:46:39 2026 user.notice podkop-engine: sing-box keeps crashing and procd stopped restarting it; stopping podkop so that DNS works without it
+Mon Nov 23 18:53:30 2026 user.notice podkop-engine: sing-box (pid 14916) has not answered DNS on 127.0.0.42 for 49 s; killing it so that procd starts it again
+Mon Nov 23 18:53:30 2026 user.notice podkop-engine: sing-box exited unexpectedly (killed by the liveness probe: no DNS answer for 49 s), procd restarts it; MemTotal 986 MB, MemAvailable 864 MB; /tmp 25 of 493 MB; /tmp/sing-box/cache.db 0.0 MB; largest: rpcd 1 MB, netifd 1 MB, uhttpd 1 MB
+prw-r--r--    1 root     root             0 Nov 23 18:57 /var/run/podkop-engine.failsafe
+R12_GUEST_RC=0

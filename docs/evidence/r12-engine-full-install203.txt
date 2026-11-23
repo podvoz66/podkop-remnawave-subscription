@@ -1,0 +1,7 @@
+/tmp/r12-offline/deps.tar: OK
+/tmp/r12-offline/r12-engine-install203.sh: OK
+/root/r12-engine-baseline/rollback.sh: OK
+/tmp/r12-offline/engine.apk: OK
+/tmp/r12-offline/podkop.apk: OK
+/tmp/r12-offline/libatomic1-14.3.0-r5.apk: UNTRUSTED signature
+R12_GUEST_RC=1

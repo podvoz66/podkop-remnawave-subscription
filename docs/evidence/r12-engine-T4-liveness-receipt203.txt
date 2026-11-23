@@ -1,0 +1,2 @@
+cat: can't open '/var/run/podkop-engine.liveness': No such file or directory
+R12_GUEST_RC=1

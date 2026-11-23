@@ -18,7 +18,12 @@ class DNSCodec(unittest.TestCase):
     def test_external_questions_are_rejected_without_upstream(self):
         with self.assertRaises(ValueError): fixture.dns_reply(self.query('example.com'))
     def test_aaaa_not_silently_answered_as_a(self):
-        with self.assertRaises(ValueError): fixture.dns_reply(self.query(typ=28))
+        out,_=fixture.dns_reply(self.query(typ=28))
+        self.assertEqual(struct.unpack('!6H',out[:12]),(12345,0x8180,1,0,0,0))
+    def test_edns_accepted_and_malformed_opt_rejected(self):
+        req=self.query(); edns=req[:10]+b'\0\1'+req[12:]+b'\0\0\x29\x04\xd0\0\0\0\0\0\0'
+        self.assertEqual(fixture.dns_reply(edns),fixture.dns_reply(req))
+        with self.assertRaises(ValueError): fixture.dns_reply(edns[:-1])
     def test_short_compressed_trailing_and_multiquestion_rejected(self):
         req=self.query()
         for bad in [b'',req[:15],req+b'extra',req[:4]+b'\0\2'+req[6:],req[:12]+b'\xc0\x0c\0\1\0\1']:

@@ -1,0 +1,8 @@
+/tmp/r12-offline/flock-2.41.5-r1.apk: OK
+(1/1) Installing flock (2.41.5-r1)
+  0%                                              15% ######                                        Executing flock-2.41.5-r1.post-install
+ 15% ######                                        * add alternative: /usr/bin/flock -> /usr/bin/util-linux-flock
+ 15% ######                                      100% ############################################[syncing disks...]OK: 54.6 MiB in 199 packages
+/usr/bin/flock
+TRUSTED_FLOCK_ADDED_TO_GUEST_ROLLBACK_SET
+R12_GUEST_RC=0

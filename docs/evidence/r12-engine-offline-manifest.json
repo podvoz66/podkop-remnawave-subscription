@@ -1,0 +1,147 @@
+{
+  "openwrt": "25.12.4",
+  "arch": "x86_64",
+  "engine_commit": "a9926c37fe5fbf57241aaea583ffc1ae717f835f",
+  "packages": [
+    {
+      "filename": "bind-dig-9.20.31-r1.apk",
+      "bytes": 52527,
+      "sha256": "303145ebc203d8d14e16be047c0748695c0369b3b24670dee7d4548081bfe60d",
+      "source": "official OpenWrt 25.12.4 feed",
+      "native_signature": "SIGNED_INDEX_AUTHENTICATED",
+      "verification": "Native apk fetch offline against trusted signed ADB, byte comparison; wrong valid APK negative test rejected"
+    },
+    {
+      "filename": "bind-libs-9.20.31-r1.apk",
+      "bytes": 1259546,
+      "sha256": "3021e252a8f4851f128eb337f65faf3956949b34c1749e9e1582cc901fd04076",
+      "source": "official OpenWrt 25.12.4 feed",
+      "native_signature": "SIGNED_INDEX_AUTHENTICATED",
+      "verification": "Native apk fetch offline against trusted signed ADB, byte comparison; wrong valid APK negative test rejected"
+    },
+    {
+      "filename": "coreutils-9.9-r2.apk",
+      "bytes": 751,
+      "sha256": "fe275266eb3d917162986bad82d2d74bc3763db9f497a584b77215e40e53f158",
+      "source": "official OpenWrt 25.12.4 feed",
+      "native_signature": "SIGNED_INDEX_AUTHENTICATED",
+      "verification": "Native apk fetch offline against trusted signed ADB, byte comparison; wrong valid APK negative test rejected"
+    },
+    {
+      "filename": "coreutils-base64-9.9-r2.apk",
+      "bytes": 17565,
+      "sha256": "5f8e6073e8074515830789aff5adb5601447468b62643016fd277ec3dd7e16f4",
+      "source": "official OpenWrt 25.12.4 feed",
+      "native_signature": "SIGNED_INDEX_AUTHENTICATED",
+      "verification": "Native apk fetch offline against trusted signed ADB, byte comparison; wrong valid APK negative test rejected"
+    },
+    {
+      "filename": "curl-8.23.0-r1.apk",
+      "bytes": 74443,
+      "sha256": "4b5b4df03fb82b55bb97a964bd2d704df0bf6facdfa4aa6146a66dfe619661bf",
+      "source": "official OpenWrt 25.12.4 feed",
+      "native_signature": "SIGNED_INDEX_AUTHENTICATED",
+      "verification": "Native apk fetch offline against trusted signed ADB, byte comparison; wrong valid APK negative test rejected"
+    },
+    {
+      "filename": "jq-1.8.1-r2.apk",
+      "bytes": 145802,
+      "sha256": "22bfc1d4252912c0f4f5682e9dbbcfa084394281802b47816dfc3a122eb463a1",
+      "source": "official OpenWrt 25.12.4 feed",
+      "native_signature": "SIGNED_INDEX_AUTHENTICATED",
+      "verification": "Native apk fetch offline against trusted signed ADB, byte comparison; wrong valid APK negative test rejected"
+    },
+    {
+      "filename": "kmod-nf-tproxy-6.12.87-r1.apk",
+      "bytes": 3602,
+      "sha256": "8ed2e1fc604337336025b6a2efcae670d76bd41cc890b87f67742702563c769e",
+      "source": "official OpenWrt 25.12.4 feed",
+      "native_signature": "SIGNED_INDEX_AUTHENTICATED",
+      "verification": "Native apk fetch offline against trusted signed ADB, byte comparison; wrong valid APK negative test rejected"
+    },
+    {
+      "filename": "kmod-nft-tproxy-6.12.87-r1.apk",
+      "bytes": 3451,
+      "sha256": "3d63272a15450a2ca92d7dfdc416094f0041f592acca5635299eb9f7592a428e",
+      "source": "official OpenWrt 25.12.4 feed",
+      "native_signature": "SIGNED_INDEX_AUTHENTICATED",
+      "verification": "Native apk fetch offline against trusted signed ADB, byte comparison; wrong valid APK negative test rejected"
+    },
+    {
+      "filename": "libatomic1-14.3.0-r5.apk",
+      "bytes": 7514,
+      "sha256": "7ba4a3b3292079f752acd49ab0eb2b5c44ab535e9565a01cee75a87f3ef95c6f",
+      "source": "official OpenWrt 25.12.4 feed",
+      "native_signature": "SIGNED_INDEX_AUTHENTICATED",
+      "verification": "Native apk fetch offline against trusted signed ADB, byte comparison; wrong valid APK negative test rejected"
+    },
+    {
+      "filename": "libcurl4-8.23.0-r1.apk",
+      "bytes": 259324,
+      "sha256": "7d55299b00d82a5eafa789a80ccbe19182770f4c60585ebdfeabfab4bf21ec5f",
+      "source": "official OpenWrt 25.12.4 feed",
+      "native_signature": "SIGNED_INDEX_AUTHENTICATED",
+      "verification": "Native apk fetch offline against trusted signed ADB, byte comparison; wrong valid APK negative test rejected"
+    },
+    {
+      "filename": "libnghttp2-14-1.70.0-r1.apk",
+      "bytes": 67681,
+      "sha256": "0c371f2c43466b07dd3a5c27a53a80f2be02489350dded970a567ef083035825",
+      "source": "official OpenWrt 25.12.4 feed",
+      "native_signature": "SIGNED_INDEX_AUTHENTICATED",
+      "verification": "Native apk fetch offline against trusted signed ADB, byte comparison; wrong valid APK negative test rejected"
+    },
+    {
+      "filename": "libopenssl3-3.5.9-r1.apk",
+      "bytes": 2556405,
+      "sha256": "a98af52505ee626ed74170f7b5bc947d964e4719c5fe164b4b4f86e0c1436124",
+      "source": "official OpenWrt 25.12.4 feed",
+      "native_signature": "SIGNED_INDEX_AUTHENTICATED",
+      "verification": "Native apk fetch offline against trusted signed ADB, byte comparison; wrong valid APK negative test rejected"
+    },
+    {
+      "filename": "liburcu-0.15.5-r1.apk",
+      "bytes": 68163,
+      "sha256": "c4f4485b8c5dedd7248aa2ca5dd869943f505185edbe23877bff43bf376820dc",
+      "source": "official OpenWrt 25.12.4 feed",
+      "native_signature": "SIGNED_INDEX_AUTHENTICATED",
+      "verification": "Native apk fetch offline against trusted signed ADB, byte comparison; wrong valid APK negative test rejected"
+    },
+    {
+      "filename": "libuv1-1.48.0-r1.apk",
+      "bytes": 70828,
+      "sha256": "572874b9398288a66b6e95fc511cd310d30dfba60f37dfb3db102c21d8a69e94",
+      "source": "official OpenWrt 25.12.4 feed",
+      "native_signature": "SIGNED_INDEX_AUTHENTICATED",
+      "verification": "Native apk fetch offline against trusted signed ADB, byte comparison; wrong valid APK negative test rejected"
+    },
+    {
+      "filename": "podkop-0.7.24-r1.apk",
+      "bytes": 36987,
+      "sha256": "a444a784a7dc22b2ba17336b773f75b27861daf3fb358fea21b31935a975318e",
+      "source": "pinned GitHub release; asset digest matched",
+      "native_signature": "UNTRUSTED_EXPECTED",
+      "verification": "Pinned official release SHA256 matched; scoped allow-untrusted for this APK only"
+    },
+    {
+      "filename": "podkop-engine_1.14.4-r28_openwrt_x86_64.apk",
+      "bytes": 9690560,
+      "sha256": "c72c91a0567a6243c55bef20b4990a521461f9740c5219d2a35b51f6cc2cbb2a",
+      "source": "pinned GitHub release; asset digest matched",
+      "native_signature": "UNTRUSTED_EXPECTED",
+      "verification": "Pinned official release SHA256 matched; scoped allow-untrusted for this APK only"
+    },
+    {
+      "filename": "flock-2.41.5-r1.apk",
+      "sha256": "2beb095dd74e47e6545af914d4a19d3f575fa1dd597882aa31624055050d82f3",
+      "source": "official OpenWrt 25.12.4 x86_64 base feed",
+      "native_signature": "SIGNED_INDEX_AUTHENTICATED",
+      "purpose": "R12 sandbox updater test only; included in rollback new-package list"
+    }
+  ],
+  "installed_packages_before": 182,
+  "installed_packages_after": 199,
+  "engine_runtime_version": "1.14.4-pdk-r28",
+  "final_installed_packages": 198,
+  "final_test_flock_installed": false
+}

@@ -1,0 +1,5 @@
+udhcpc: started, v1.37.0
+udhcpc: broadcasting discover
+udhcpc: no lease, failing
+NATIVE_STOP_REMOVED_PODKOP_RULES_AND_PROXY_DNS
+R12_GUEST_RC=0

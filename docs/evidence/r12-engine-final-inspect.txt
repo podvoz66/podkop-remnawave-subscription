@@ -1,0 +1,27 @@
+status: running
+args: -netdev stream,id=lablan,server=off,addr.type=unix,addr.path=/run/r12-lab/lan.sock,reconnect-ms=5000 -device virtio-net-pci,netdev=lablan,mac=02:52:12:02:03:01 -netdev stream,id=labwan,server=off,addr.type=unix,addr.path=/run/r12-lab/wan.sock,reconnect-ms=5000 -device virtio-net-pci,netdev=labwan,mac=02:52:12:02:03:02
+boot: order=scsi0
+cores: 1
+memory: 1024
+name: LAB203-OpenWrt
+onboot: 0
+scsi0: extra-storage:vm-203-disk-0,size=124M
+scsihw: virtio-scsi-pci
+serial0: socket
+vga: serial0
+LAB_ISOLATION_CONFIG_PASS (runtime traffic not tested)
+status: running
+args: -netdev stream,id=lablan,server=on,addr.type=unix,addr.path=/run/r12-lab/lan.sock -device virtio-net-pci,netdev=lablan,mac=02:52:12:02:04:01 -netdev stream,id=labwan,server=on,addr.type=unix,addr.path=/run/r12-lab/wan.sock -device virtio-net-pci,netdev=labwan,mac=02:52:12:02:04:02
+boot: order=scsi0
+cipassword: PRESENT_REDACTED
+ciuser: r12lab
+cores: 1
+ide2: extra-storage:vm-204-cloudinit,media=cdrom
+memory: 1024
+name: LAB204-Fixture
+onboot: 0
+scsi0: extra-storage:vm-204-disk-0,size=3G
+scsihw: virtio-scsi-pci
+serial0: socket
+vga: serial0
+LAB_ISOLATION_CONFIG_PASS (runtime traffic not tested)

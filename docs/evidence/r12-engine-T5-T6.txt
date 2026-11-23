@@ -1,0 +1,5 @@
+{"id": "r12e-t5-1795459443", "expected_path": "DIRECT", "time": 1795459443.1907215, "dns_udp": "198.18.0.3", "dns_tcp": "198.18.0.4", "upstream_dns_udp_tcp": ["10.253.203.1", "10.253.203.1"], "http": {"status": 200, "peer": "10.253.203.2", "tls_verified": false}, "https": {"status": 200, "peer": "10.253.203.2", "tls_verified": true}, "result": "PASS"}
+{"id": "r12e-t6-1795459448", "result": "FAIL", "reason": "ValueError: http independent path mismatch"}
+{"id": "r12e-t6-1795459453", "expected_path": "VPN", "time": 1795459453.7162519, "dns_udp": "198.18.0.3", "dns_tcp": "198.18.0.4", "upstream_dns_udp_tcp": ["10.253.203.1", "10.253.203.1"], "http": {"status": 200, "peer": "10.253.203.1", "tls_verified": false}, "https": {"status": 200, "peer": "10.253.203.1", "tls_verified": true}, "result": "PASS"}
+AUTOMATIC_RECOVERY_SECONDS=10
+R12_GUEST_RC=0

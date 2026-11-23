@@ -1,0 +1,2 @@
+STOP: foreign LAN route change
+R12_GUEST_RC=1

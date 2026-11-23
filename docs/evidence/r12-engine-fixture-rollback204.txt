@@ -1,0 +1,2 @@
+/tmp/r12-command-96d2d38778c9f1d4.sh: 3: set: Illegal option -o pipefail
+R12_GUEST_RC=2

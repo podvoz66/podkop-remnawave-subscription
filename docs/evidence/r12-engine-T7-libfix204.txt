@@ -1,0 +1,2 @@
+/root/r12-engine-offline/podkop-failover-lib.sh: OK
+R12_GUEST_RC=0

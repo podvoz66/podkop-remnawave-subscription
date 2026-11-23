@@ -1,3 +1,21 @@
+## Актуально: реальные испытания podkop-engine, 2026-11-23
+
+[Полный LAB-отчёт, доказательства и ограничения](../../docs/lab-podkop-engine-results.ru.md).
+**ПОДХОДИТ ЧАСТИЧНО; VM202 PRODUCTION NO-GO; PR7 Draft.**
+Установлены Podkop0.7.24 + engine1.14.4-r28; доказаны VPN→DIRECT→VPN (10 s),
+штатный STOP, crash-loop DIRECT, liveness-kill и клиентский транзит.
+Полный guest rollback199→182 и Stage6 transit PASS; затем та же пара переустановлена.
+T9 reboot/autostart + полный VPN client probe PASS. Итог198 пакетов, test flock удалён.
+T7 HTTPS/dry-run validation PASS, activation-транзакция НЕ сертифицирована.
+DNS provider fallback BLOCKED текущей no-default топологией; REALITY/IPv6 не испытаны.
+Terminal failsafe сам Podkop не возвращает. Host disk recovery НЕ ПРОВЕРЕН:
+новый root bootstrap не установлен, без соответствующих прав full-VM failure не запускать.
+Последнее разрешение владельца допускает guest-only package tests с проверенным rollback;
+старый безусловный запрет до host snapshot ниже — исторический, заменён этим разрешением.
+Сначала читать текущий отчёт и точное состояние LAB; Stage1–6 не повторять.
+
+---
+
 # Продолжить R12
 
 **PRODUCTION NO-GO.** До отдельного разрешения никаких установок/перезапусков/изменений VM202 или PVE.

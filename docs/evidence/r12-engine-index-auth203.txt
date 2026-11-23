@@ -1,0 +1,2 @@
+libatomic1: unable to select package (or its dependencies)
+R12_GUEST_RC=1

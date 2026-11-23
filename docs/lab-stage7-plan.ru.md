@@ -37,3 +37,11 @@ OpenWrt `procd`, `podkop-engine` с готовым `failsafe` и `urltest.fallba
 Это изменение плана, не установка и не доказательство, что полное переключение
 VPN→DIRECT→VPN существует в обычном Podkop. Пункты snapshot/host rollback,
 transaction-safe updater и полный guest recovery остаются обязательными.
+
+## Фактическое исполнение podkop-engine
+
+[Текущий LAB-отчёт](lab-podkop-engine-results.ru.md) заменяет прежние статусы подготовки.
+Owner разрешил guest-only tests после проверенного package/config rollback без новых
+root grants; это не снимает обязательный BLOCKER независимого host disk recovery.
+Production NO-GO. Автоматический URLTest DIRECT→VPN доказан, terminal failsafe recovery
+самостоятельно не реализует; provider DNS fallback требует отдельной приёмки.

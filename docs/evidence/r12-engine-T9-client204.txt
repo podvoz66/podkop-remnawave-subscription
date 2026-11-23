@@ -1,0 +1,3 @@
+ENGINE_LAB_ISOLATION_AND_SERVICES_PASS
+{"id": "r12e-t1-dynamic-1795460821", "expected_path": "VPN", "time": 1795460821.6851027, "dns_udp": "198.18.0.3", "dns_tcp": "198.18.0.4", "upstream_dns_udp_tcp": ["10.253.203.1", "10.253.203.1"], "http": {"status": 200, "peer": "10.253.203.1", "tls_verified": false}, "https": {"status": 200, "peer": "10.253.203.1", "tls_verified": true}, "result": "PASS"}
+R12_GUEST_RC=0

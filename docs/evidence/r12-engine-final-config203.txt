@@ -1,0 +1,13 @@
+udhcpc: started, v1.37.0
+udhcpc: broadcasting discover
+udhcpc: no lease, failing
+udhcpc: started, v1.37.0
+udhcpc: broadcasting discover
+udhcpc: no lease, failing
+udhcpc: started, v1.37.0
+udhcpc: broadcasting discover
+udhcpc: no lease, failing
+Start podkop
+service_triggers start
+ENGINE_LAB_CONFIG_STARTED_NOT_YET_TRANSIT_ACCEPTED
+R12_GUEST_RC=0

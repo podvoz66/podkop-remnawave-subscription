@@ -1,0 +1,2 @@
+734f8cbe0d92902849b27887fa4de9631ed328c0a0deee018d68dc5859c50d7c  /root/r12-engine-offline/r12-engine-test-hang203.sh
+R12_GUEST_RC=0
