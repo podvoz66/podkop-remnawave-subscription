@@ -1,3 +1,24 @@
+# R12 — приоритетная точка входа Codex (решение владельца 24.11.2026)
+
+**ВЫПОЛНЯТЬ СНАЧАЛА P0: INDEPENDENT RECOVERY + FAIL-SAFE.**
+Только после закрытия P0 перейти к **P1: REALITY timeouts / URLTest switching**. Updater/USA — **P2**, текущие ручные USA-ключи сохраняются после четырёхчасовых циклов; не исправлять или запускать PR7 сейчас.
+
+## Ближайшая задача Codex
+
+1. Восстановить контекст GitHub R12, последние read-only checkpoint и текущую production версию (OpenWrt25.12.4, Podkop0.7.24, engine-full1.14.4-r28, native failsafe active); `AGENTS.md`, [план](01-Задача-и-план.md), [отчёт RO](../../docs/vm202-vpn-readonly-20261124.ru.md), [первоначальный rollout](../../docs/vm202-production-rollout-20261124.ru.md), LAB203/204 docs.
+2. Предложить архитектуру **действительно независимого** bounded PVE recovery: контроллер/root helper на PVE, который выполняет фиксированные действия без активной SSH/Codex-сессии и не полагается исключительно на сеть VM202, guest SSH/procd или guest watchdog. Учесть: хост default route через VM202; не создавать второго активного шлюза; разные пути для process failure vs guest kernel/boot/disk failure; отказ самого PVE/физического WAN вне охвата. Определить какие права/capabilities нужно согласовать (сейчас `codexops` не имеет root-owned timer на VM202).
+3. Протестировать controller **сначала на изолированном LAB203/204**, включая arm/fire/disarm, timeout, controller lost, guest SSH fail, восстановление прямого DNS/LAN HTTPS и логирование/RTO. Не заменять полноценное восстановление VM202 её гостевым watchdog.
+4. Спланировать три нативных fail-safe сценария: **single SIGKILL** (procd respawn обычно через ~5 с), **terminal crash loop** (порядка шести падений в 600 с → Podkop STOP→DIRECT), **DNS hang** (liveness каждые 20с/3 пропуска, приблизительно 49–72с; возможны условия арминга и grace). Проверять реальный клиентский трафик, а не только PID и `nslookup` самого маршрутизатора. Terminal native failsafe сам Podkop обратно не запускает; восстановление VPN требует отдельного условного механизма.
+5. До любых fault injections на production показать **план GO/STOP**, фиксированную автоматическую границу восстановления и rollback, измерения лаборатории, независимый доступ PVE, свежий backup; отдельно согласовать потенциальный guest kernel/disk fencing. Все действия на VM202 пока read-only.
+6. Документировать лабораторные PASS/FAIL/UNVERIFIED, коммиты в отдельную ветку, без merge. Затем получить согласование пользователя на ограниченный production-тест.
+7. **После P0**: переход к P1 — корреляция периодических REALITY/VLESS deadline exceeded с per-node URLTest/download-check (64 KiB), историей selector, сервером/транспортом; не трогать on1x (недоступен из РФ, тикет) и Oslo (не оплачен), не удалять ключи.
+
+Сейчас **не запускать** предложенный ранее короткий 18-секундный guest-only watchdog: независимый host-side механизм ещё не подготовлен и не принят. Не устанавливать второй конфликтующий guard, не менять `dont_touch_dhcp=0`.
+
+**Первый ответ Codex:** краткая схема PVE→LAB recovery, существующие capabilities/блокеры, точный порядок испытаний с критериями PASS и предложение следующего безопасного read-only шага. Никаких изменений production без нового GO.
+
+---
+
 ## Read-only checkpoint 24.11, 01:41–01:48 +05
 
 [первый RO-анализ VM202](../../docs/vm202-vpn-readonly-20261124.ru.md). Ветка `codex/r12-vm202-prod-diagnostics-20261124`, исходный HEADad501a52.
